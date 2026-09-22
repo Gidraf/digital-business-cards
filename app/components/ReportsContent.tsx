@@ -17,13 +17,14 @@ function shiftDays(iso: string, days: number): string {
     return d.toISOString().slice(0, 10);
 }
 
-export default function ReportsContent({ report, currency }: { report: Report; currency: string }) {
+export default function ReportsContent({ report, currency, unavailable = null }: { report: Report; currency: string; unavailable?: string | null }) {
     const router = useRouter();
     const { toast } = useToast();
-    const [from, setFrom] = useState(report.from);
-    const [to, setTo] = useState(report.to);
     const [toDelete, setToDelete] = useState<PrintEvent | null>(null);
     const today = new Date().toISOString().slice(0, 10);
+    // report.from/to are blank when the reports call failed — fall back to the last 30 days
+    const [from, setFrom] = useState(report.from || shiftDays(today, -29));
+    const [to, setTo] = useState(report.to || today);
     const t = report.totals;
     const activeDays = report.days.filter((d) => d.prints > 0 || d.created_designs > 0 || d.created_people > 0 || d.created_jobs > 0 || d.created_templates > 0);
 
@@ -61,6 +62,12 @@ export default function ReportsContent({ report, currency }: { report: Report; c
                 <Link href="/settings/pricing" className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50">Pricing</Link>
             </div>
 
+            {unavailable && (
+                <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    Reports are unavailable right now ({unavailable}). If the API was just updated it may still be restarting — reload in a moment.
+                </p>
+            )}
+
             <div className="mb-6 flex flex-wrap items-end gap-2 rounded-xl border border-zinc-200 bg-white p-4">
                 <label className="text-xs text-zinc-600">From<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="mt-1 block rounded border border-zinc-300 px-2 py-1 text-sm" /></label>
                 <label className="text-xs text-zinc-600">To<input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className="mt-1 block rounded border border-zinc-300 px-2 py-1 text-sm" /></label>
@@ -73,7 +80,7 @@ export default function ReportsContent({ report, currency }: { report: Report; c
             </div>
 
             <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-                {kpi("Revenue", money(t.revenue, currency), `${report.from} → ${report.to}`)}
+                {kpi("Revenue", money(t.revenue, currency), `${report.from || from} → ${report.to || to}`)}
                 {kpi("Cards printed", t.printed_cards, `${t.prints} print run${t.prints === 1 ? "" : "s"}`)}
                 {kpi("Sheets printed", t.printed_sheets, "paper used")}
                 {kpi("Designs created", t.created_designs, "events, harambee, flyers…")}

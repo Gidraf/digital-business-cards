@@ -95,7 +95,23 @@ In the CVPAP dashboard (`material-kit-react`) set `NEXT_PUBLIC_CARDS_APP_URL` to
 docker compose up -d --build
 ```
 
-The image bakes `NEXT_PUBLIC_*` values at build time (see `docker-compose.yml`). Put it behind nginx next to the CVPAP API; the app only needs to reach the API (and browsers need to reach MinIO's public endpoint for images and PDF downloads).
+The image bakes `NEXT_PUBLIC_*` values at build time (see `docker-compose.yml`) and listens on **7500**. Put it behind nginx next to the CVPAP API; the app only needs to reach the API (and browsers need to reach MinIO's public endpoint for images and PDF downloads).
+
+### nginx + TLS (cards.gidraf.dev)
+
+`deploy/nginx/cards.gidraf.dev.conf` proxies the site to `127.0.0.1:7500`. It is HTTP-only —
+Certbot adds the 443 block and the redirect:
+
+```bash
+sudo cp deploy/nginx/cards.gidraf.dev.conf /etc/nginx/sites-available/cards.gidraf.dev
+sudo ln -s /etc/nginx/sites-available/cards.gidraf.dev /etc/nginx/sites-enabled/cards.gidraf.dev
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d cards.gidraf.dev
+```
+
+Point the A record for `cards.gidraf.dev` at the server first, build the image with
+`NEXT_PUBLIC_CVPAP_API_URL=https://api.ajiriwa.gidraf.dev`, and set
+`NEXT_PUBLIC_CARDS_APP_URL=https://cards.gidraf.dev` in the CVPAP dashboard.
 
 ## Printing tips
 

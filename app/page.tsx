@@ -1,14 +1,14 @@
-import { serverApi } from "@/lib/api-server";
+import { safeValue, serverApi } from "@/lib/api-server";
 import DashboardContent from "./components/DashboardContent";
 
 export default async function Home() {
     const { api, session } = await serverApi();
     const [summary, companies, templates, designs, printJobs] = await Promise.all([
-        api.summary(),
-        api.listCompanies(),
-        api.listTemplates(undefined, false),
-        api.listDesigns(),
-        api.listPrintJobs(),
+        safeValue(api.summary(), { companies: 0, people: 0, templates: 0, builtin_templates: 0, designs: 0, print_jobs: 0 }, "summary"),
+        safeValue(api.listCompanies(), [], "listCompanies"),
+        safeValue(api.listTemplates(undefined, false), [], "listTemplates"),
+        safeValue(api.listDesigns(), [], "listDesigns"),
+        safeValue(api.listPrintJobs(), [], "listPrintJobs"),
     ]);
 
     return (

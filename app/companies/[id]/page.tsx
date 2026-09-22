@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { serverApi } from "@/lib/api-server";
+import { safeValue, serverApi } from "@/lib/api-server";
 import { ApiError } from "@/lib/api";
 import CompanyDetailContent from "@/app/components/CompanyDetailContent";
 
@@ -14,7 +14,7 @@ export default async function CompanyDetailPage(props: PageProps<"/companies/[id
         if (e instanceof ApiError && e.status === 404) notFound();
         throw e;
     }
-    const templates = await api.listTemplates("business_card", false);
+    const templates = await safeValue(api.listTemplates("business_card", false), [], "listTemplates");
 
     return <CompanyDetailContent company={company} people={people} templates={templates} />;
 }

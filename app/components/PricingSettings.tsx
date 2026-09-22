@@ -12,13 +12,15 @@ import { useToast } from "./ToastProvider";
 interface PricingSettingsProps {
     initial: Pricing;
     defaults: Pricing;
+    /** error text when the saved rates couldn't be loaded (defaults shown instead) */
+    unavailable?: string | null;
 }
 
 function cloneKind(k?: KindPricing): KindPricing {
     return { unit_price: k?.unit_price ?? 0, min_quantity: k?.min_quantity ?? 1, tiers: (k?.tiers ?? []).map((t) => ({ ...t })) };
 }
 
-export default function PricingSettings({ initial, defaults }: PricingSettingsProps) {
+export default function PricingSettings({ initial, defaults, unavailable = null }: PricingSettingsProps) {
     const router = useRouter();
     const { toast } = useToast();
     const [pricing, setPricing] = useState<Pricing>(() => ({
@@ -82,6 +84,11 @@ export default function PricingSettings({ initial, defaults }: PricingSettingsPr
                     </button>
                 </div>
             </div>
+            {unavailable && (
+                <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    Couldn&apos;t load your saved rates ({unavailable}) — the defaults below are shown. Saving will overwrite whatever is stored.
+                </p>
+            )}
             {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
             <div className="mb-6 grid gap-4 sm:grid-cols-3">

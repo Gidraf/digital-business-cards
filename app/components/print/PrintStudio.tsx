@@ -19,6 +19,8 @@ import { useToast } from "../ToastProvider";
 interface PrintStudioProps {
     job?: PrintJob;
     pricing?: Pricing;
+    /** true when the pricing endpoint was unreachable and defaults are shown */
+    pricingFallback?: boolean;
     companies: Company[];
     people: Person[];
     designs: Design[];
@@ -32,7 +34,7 @@ function newKey() {
     return crypto.randomUUID();
 }
 
-export default function PrintStudio({ job, pricing = EMPTY_PRICING, companies, people, designs, templates, seed }: PrintStudioProps) {
+export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallback = false, companies, people, designs, templates, seed }: PrintStudioProps) {
     const router = useRouter();
     const { toast } = useToast();
 
@@ -648,6 +650,11 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, companies, p
                                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">Price</h2>
                                 <Link href="/settings/pricing" className="text-xs text-sky-600 hover:underline">Edit rates</Link>
                             </div>
+                            {pricingFallback && (
+                                <p className="mb-2 rounded bg-amber-50 px-2 py-1.5 text-[11px] text-amber-700">
+                                    Couldn&apos;t load your saved rates — showing default prices. Check the API, then reload.
+                                </p>
+                            )}
                             <div className="space-y-1.5">
                                 {quote.lines.map((l, i) => (
                                     <div key={i} className="flex items-baseline justify-between gap-2">

@@ -43,6 +43,22 @@ export interface Quote {
 
 export const EMPTY_PRICING: Pricing = { currency: "KES", design_fee: 0, kinds: {} };
 
+/** Mirrors DEFAULT_PRICING in CVPAP app/model/cards.py — used as a fallback when
+ * the pricing endpoint can't be reached, so the studio still quotes sensibly. */
+export const DEFAULT_PRICING: Pricing = {
+    currency: "KES",
+    design_fee: 0,
+    kinds: {
+        business_card: { unit_price: 3, min_quantity: 10, tiers: [] },
+        flyer: { unit_price: 10, min_quantity: 1, tiers: [{ per_sheet: 1, price: 30 }, { per_sheet: 2, price: 15 }, { per_sheet: 4, price: 8 }, { per_sheet: 5, price: 6 }] },
+        event: { unit_price: 15, min_quantity: 1, tiers: [{ per_sheet: 1, price: 30 }, { per_sheet: 2, price: 15 }, { per_sheet: 4, price: 8 }] },
+        harambee: { unit_price: 15, min_quantity: 1, tiers: [{ per_sheet: 1, price: 30 }, { per_sheet: 2, price: 15 }, { per_sheet: 4, price: 8 }] },
+        birthday: { unit_price: 15, min_quantity: 1, tiers: [{ per_sheet: 1, price: 30 }, { per_sheet: 2, price: 15 }, { per_sheet: 4, price: 8 }] },
+        baby_shower: { unit_price: 15, min_quantity: 1, tiers: [{ per_sheet: 1, price: 30 }, { per_sheet: 2, price: 15 }, { per_sheet: 4, price: 8 }] },
+        wedding: { unit_price: 20, min_quantity: 1, tiers: [{ per_sheet: 1, price: 40 }, { per_sheet: 2, price: 20 }, { per_sheet: 4, price: 10 }] },
+    },
+};
+
 export function kindPricing(pricing: Pricing, kind: CardKind): KindPricing {
     return pricing.kinds[kind] ?? { unit_price: 0, min_quantity: 1, tiers: [] };
 }
