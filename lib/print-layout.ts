@@ -11,6 +11,7 @@ import type { CardData, PaperName, PrintItem, PrintLayoutSettings, PrintMaterial
 import { getGoogleFontsUrl, getUsedFonts } from "./fonts";
 import { designCardData, personCardData, qrPayloadFor } from "./card-data";
 import { renderFaceHtml, type RenderImages } from "./render-html";
+import { estimateCoverage, inkSaveConfig, type InkMode } from "./ink";
 
 export const MM_PX = 96 / 25.4; // CSS px per mm
 
@@ -23,6 +24,8 @@ export const PAPERS: Record<Exclude<PaperName, "custom">, { width_mm: number; he
 };
 
 export const DEFAULT_LAYOUT: PrintLayoutSettings = {
+    ink: "saver",
+    grayscale: false,
     margin_mm: 5,
     gap_mm: 3,
     crop_marks: true,
@@ -299,9 +302,46 @@ export interface SheetOptions {
     title?: string;
     /** draw a light outline around each card (screen preview only) */
     previewOutlines?: boolean;
+    /** lighten heavy fills before printing (see lib/ink.ts) */
+    ink?: InkMode;
+    /** print with black ink only */
+    grayscale?: boolean;
 }
 
-export function buildSheetHtml(cards: CardInstance[], opts: SheetOptions): { html: string; pages: SheetPage[]; page: { width_mm: number; height_mm: number } } {
+/** Apply the ink-saving transform to every face of every card. */
+export function inkSaveCards(cards: CardInstance[], mode: InkMode): CardInstance[] {
+    if (mode === "off") return cards;
+    const cache = new Map<TemplateConfig, TemplateConfig>();
+    const conv = (cfg: TemplateConfig) => {
+        let out = cache.get(cfg);
+        if (!out) { out = inkSaveConfig(cfg, mode); cache.set(cfg, out); }
+        return out;
+    };
+    return cards.map((c) => ({ ...c, front: conv(c.front), back: c.back ? conv(c.back) : null }));
+}
+
+/** Estimated ink coverage per sheet, 0–1 (see lib/ink.ts). */
+export function sheetCoverage(cards: CardInstance[], page: { width_mm: number; height_mm: number }, layout: PrintLayoutSettings): number {
+    if (cards.length === 0) return 0;
+    const pageArea = page.width_mm * page.height_mm;
+    const scale = layout.scale > 0 ? layout.scale : 1;
+    const pages = paginate(cards, page, layout);
+    if (pages.length === 0) return 0;
+    let ink = 0;
+    for (const p of pages) {
+        for (const card of p.slots) {
+            if (!card) continue;
+            const w = (layout.card_width_mm ?? card.width_mm) * scale;
+            const h = (layout.card_height_mm ?? card.height_mm) * scale;
+            const face = p.side === "back" ? (card.back ?? card.front) : card.front;
+            ink += ((w * h) / pageArea) * estimateCoverage(face);
+        }
+    }
+    return ink / pages.length;
+}
+
+export function buildSheetHtml(rawCards: CardInstance[], opts: SheetOptions): { html: string; pages: SheetPage[]; page: { width_mm: number; height_mm: number } } {
+    const cards = inkSaveCards(rawCards, opts.ink ?? "off");
     const page = paperSize(opts.paper, opts.orientation, opts.customPaper);
     const pages = paginate(cards, page, opts.layout);
     const fonts = new Set<string>();
@@ -341,7 +381,7 @@ ${fontsUrl ? `<link rel="stylesheet" href="${fontsUrl}">` : ""}
 html, body { margin: 0; padding: 0; background: #fff; }
 .sheet { position: relative; overflow: hidden; background: #fff; page-break-after: always; break-after: page; }
 .sheet:last-child { page-break-after: auto; break-after: auto; }
-.card-face { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.card-face { -webkit-print-color-adjust: exact; print-color-adjust: exact; ${opts.grayscale ? "filter: grayscale(1);" : ""} }
 .card-face img { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 @media screen { body { background: #e5e7eb; padding: 12px; } .sheet { margin: 0 auto 12px auto; box-shadow: 0 2px 12px rgba(0,0,0,0.15); } }
 @media print { body { background: #fff; padding: 0; } .sheet { margin: 0; box-shadow: none; } }

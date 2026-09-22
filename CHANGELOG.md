@@ -21,6 +21,10 @@ All notable changes to this project will be documented in this file.
   mirrored for duplex. `Print` (browser dialog) and `Save as PDF` (Chromium render in
   CVPAP, stored in MinIO).
 - Built-in business-card back sides ("If found, please return to…", QR back).
+- **Ink saver** for printing: pale panels instead of solid fills, white card background,
+  faded/dropped background photos, no shadows, automatic text darkening for legibility,
+  black-ink-only option and an estimated coverage readout. Six ink-light built-in templates
+  (2 business cards, harambee, invitation, birthday, flyer).
 - **Shop pricing** (per kind: base price, minimum quantity, tiers by cards-per-sheet), a live
   quote in the Print Studio, print logging and a **Reports** page (created/printed per day,
   sheets, revenue, by card type).

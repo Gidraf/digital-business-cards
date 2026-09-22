@@ -24,6 +24,7 @@
 - **Print Studio** — pick a paper size (A4, A3, A5, Letter, Legal), portrait/landscape, margins, gap and crop marks; the sheet is imposed N‑up (an A4 takes **10** standard business cards). Mix designs freely on one run — cards 1‑3 one design, 4‑6 another — each row has its own template and quantity. Backs are mirrored for a long‑edge duplex flip.
 - **Print or save** — `Print` opens the browser print dialog at exact size; `Save as PDF` renders the same sheet with Chromium (Playwright) inside CVPAP and stores it in MinIO for download.
 - **Shop pricing &amp; reports** — set what you charge per card type: a base price, a minimum quantity (e.g. business cards KES 3 each, minimum 10 = KES 30) and tiers by *cards per sheet* (flyers 2‑up = 15, 5‑up = 6…). The Print Studio quotes each run live; every `Print` / *Mark as printed* is logged, and **Reports** show cards created and printed per day, sheets used and revenue, by card type.
+- **Ink saver** — big solid fills are what drain an inkjet. Before printing, the sheet is lightened automatically: dark panels become a pale tint of the same colour, the card background becomes paper white, full-bleed photos fade (or drop), soft shadows go, and thin accent rules stay solid. Text on a now-light panel is darkened so it stays readable. There is a **black-ink-only** option and an estimated coverage readout (typically **~70–80% less ink** on a dark design). Your saved design is never modified — only the print sheet. Several **"ink saver" built-in templates** are designed this way from the start.
 - **Digital export** — self‑contained HTML + vCard per person (QR, save‑contact), as before.
 - **CSV bulk import**, per‑company **custom fields** and an **asset library** (logos, backgrounds, icons) stored in MinIO.
 - **CVPAP authentication** — sign in with your CVPAP partner account, or arrive from the CVPAP dashboard's *Cards &amp; Print* link with single sign‑on. All data is partner‑scoped; super‑admins can act on behalf of a partner.
@@ -117,6 +118,7 @@ Point the A record for `cards.gidraf.dev` at the server first, build the image w
 
 - In the print dialog choose **Actual size / 100 %**, no scaling, margins **None**. The sheet already carries its own margins and crop marks.
 - For two‑sided cards print the PDF **duplex, flip on long edge** (the back pages are pre‑mirrored). If your printer flips on the short edge, choose *All fronts, then all backs* and feed the sheets manually.
+- Ink: leave **Ink saver** on (default) and let the ivory stock supply the background — on an EcoTank a pale sheet costs a fraction of a full-bleed dark one, dries faster and doesn't band. Pick an *"ink saver"* template for the cheapest result. **Black ink only** is cheaper still for text-heavy cards.
 - A4 fits 2 × 5 standard business cards (89 × 51 mm) in portrait; A6 event cards fit 2 per A4 in landscape, or 4 with a *Borderless* layout on a printer that supports it.
 
 ## Project structure
@@ -137,6 +139,7 @@ lib/
   card-data.ts         person/design → render data, vCard, QR payload
   render-html.ts       card face → static HTML
   print-layout.ts      imposition engine + sheet HTML
+  ink.ts               ink-saving transform + coverage estimate
   pricing.ts           quote calculation (tiers by cards-per-sheet, minimum quantity)
   digital-export.ts    HTML + vCard zip
 ```

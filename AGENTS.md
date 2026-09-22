@@ -24,6 +24,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
   client-side and saves it on the job; `POST …/print-jobs/<id>/printed` logs a
   `cards_print_events` row (browser print auto-logs; "Mark as printed" for reprints/PDF).
   `GET …/reports?from&to` aggregates per day.
+- **Ink saving** (`lib/ink.ts`): `inkSaveConfig()` lightens a face for print — panels
+  (area >= 18% of the card) get a pale tint, the card background goes white, background
+  images (>= 55%) fade or drop, shadows go, small accents stay solid, and light text over a
+  now-light backdrop is darkened. `buildSheetHtml` applies it via `opts.ink`, so preview,
+  browser print and the server PDF always agree. The saved template is never changed; the
+  mode + `grayscale` live in the job's `layout`.
 - Units: template `config` is in px (designer canvas); `width_mm`/`height_mm` is the
   physical size. `MM_PX = 96/25.4` converts for print.
 - Run locally: CVPAP API on :5000 (`python run.py` in ../CVPAP), `yarn dev` here. The

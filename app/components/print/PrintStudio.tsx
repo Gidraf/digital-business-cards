@@ -7,9 +7,10 @@ import { clientApi, ApiError } from "@/lib/api";
 import { getKind, DESIGN_KINDS } from "@/lib/card-kinds";
 import { personCardData } from "@/lib/card-data";
 import {
-    DEFAULT_LAYOUT, PAPERS, buildSheetHtml, computeGrid, expandItems, inlineImageUrl, layoutSummary, paperSize,
-    type CardInstance,
+    DEFAULT_LAYOUT, PAPERS, buildSheetHtml, computeGrid, expandItems, inkSaveCards, inlineImageUrl,
+    layoutSummary, paperSize, sheetCoverage, type CardInstance,
 } from "@/lib/print-layout";
+import { INK_MODE_LABELS, type InkMode } from "@/lib/ink";
 import { EMPTY_PRICING, buildQuote, money, quoteLine, type Pricing, type Quote } from "@/lib/pricing";
 import { fmtDateTime } from "@/lib/format";
 import type { CardKind, CardTemplate, Company, Design, PaperName, Person, PrintItem, PrintJob, PrintLayoutSettings, PrintMaterials } from "@/lib/types";
@@ -59,6 +60,8 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
     const [printedCount, setPrintedCount] = useState<number>(job?.printed_count ?? 0);
     const [lastPrintedAt, setLastPrintedAt] = useState<string | null>(job?.last_printed_at ?? null);
     const [markCopies, setMarkCopies] = useState(1);
+    const [ink, setInk] = useState<InkMode>((job?.layout?.ink as InkMode) ?? DEFAULT_LAYOUT.ink ?? "saver");
+    const [grayscale, setGrayscale] = useState<boolean>(job?.layout?.grayscale ?? false);
     const [pageCount, setPageCount] = useState<number>(job?.page_count ?? 0);
     const [status, setStatus] = useState<PrintJob["status"]>(job?.status ?? "draft");
 
@@ -117,8 +120,8 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
     // 3. sheet HTML
     const sheet = useMemo(() => {
         if (cards.length === 0) return null;
-        return buildSheetHtml(cards, { paper, orientation, layout, title: name || "Print sheet", previewOutlines: true });
-    }, [cards, paper, orientation, layout, name]);
+        return buildSheetHtml(cards, { paper, orientation, layout, title: name || "Print sheet", previewOutlines: true, ink, grayscale });
+    }, [cards, paper, orientation, layout, name, ink, grayscale]);
 
     useEffect(() => {
         setSheetHtml(sheet?.html ?? "");
@@ -138,6 +141,15 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
     }, [cards.length, perOrientation]);
     const page = paperSize(paper, orientation);
     const totalCards = items.reduce((n, it) => n + (it.quantity || 0), 0);
+
+    // estimated ink coverage per sheet, as designed vs. with the saver on
+    const coverage = useMemo(() => {
+        if (cards.length === 0) return null;
+        const asDesigned = sheetCoverage(cards, page, layout);
+        const printed = ink === "off" ? asDesigned : sheetCoverage(inkSaveCards(cards, ink), page, layout);
+        const saved = asDesigned > 0.001 ? Math.max(0, 1 - printed / asDesigned) : 0;
+        return { asDesigned, printed, saved };
+    }, [cards, page, layout, ink]);
 
     // Quote: per row, price/card depends on how many of THAT card fit on a sheet
     const quote: Quote = useMemo(() => {
@@ -231,7 +243,7 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
             paper,
             orientation,
             items: plainItems,
-            layout,
+            layout: { ...layout, ink, grayscale },
             quote,
         };
         try {
@@ -262,7 +274,7 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
         if (!id) { setBusy(null); return; }
         try {
             // render WITHOUT the on-screen outlines
-            const clean = buildSheetHtml(cards, { paper, orientation, layout, title: name || "Print sheet", previewOutlines: false });
+            const clean = buildSheetHtml(cards, { paper, orientation, layout, title: name || "Print sheet", previewOutlines: false, ink, grayscale });
             setStatus("rendering");
             const rendered = await clientApi().renderPrintJob(id, clean.html);
             setPdfUrl(rendered.pdf_url);
@@ -304,7 +316,7 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
         if (!sheet || cards.length === 0) { setError("Nothing to print yet"); return; }
         setBusy("print");
         // a dedicated print window gets the exact @page size (the preview iframe is scaled)
-        const clean = buildSheetHtml(cards, { paper, orientation, layout, title: name || "Print sheet", previewOutlines: false });
+        const clean = buildSheetHtml(cards, { paper, orientation, layout, title: name || "Print sheet", previewOutlines: false, ink, grayscale });
         const w = window.open("", "_blank");
         if (!w) { setBusy(null); setError("Pop-up blocked — allow pop-ups to print"); return; }
         w.document.open();
@@ -558,6 +570,41 @@ export default function PrintStudio({ job, pricing = EMPTY_PRICING, pricingFallb
 
                 {/* ── Right: paper & layout ── */}
                 <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-200 bg-white p-4">
+                        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wider text-zinc-400">Ink</h2>
+                        <p className="mb-2 text-[11px] text-zinc-500">Large solid areas are the expensive part of a print. This lightens them for printing only — your saved design is untouched.</p>
+                        <select
+                            value={ink}
+                            onChange={(e) => { setInk(e.target.value as InkMode); markDirty(); }}
+                            className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 text-sm"
+                        >
+                            {(Object.keys(INK_MODE_LABELS) as InkMode[]).map((m) => (
+                                <option key={m} value={m}>{INK_MODE_LABELS[m]}</option>
+                            ))}
+                        </select>
+                        <label className="mt-2 flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={grayscale} onChange={(e) => { setGrayscale(e.target.checked); markDirty(); }} />
+                            Black ink only (grayscale)
+                        </label>
+                        {coverage && (
+                            <div className="mt-3 border-t border-zinc-100 pt-2 text-xs">
+                                <div className="flex items-center justify-between text-zinc-600">
+                                    <span>Estimated coverage</span>
+                                    <span className="font-semibold">{Math.round(coverage.printed * 100)}% of the sheet</span>
+                                </div>
+                                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-100">
+                                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(2, Math.min(100, coverage.printed * 100))}%` }} />
+                                </div>
+                                {ink !== "off" && coverage.saved > 0.01 && (
+                                    <p className="mt-1.5 text-emerald-700">
+                                        ~{Math.round(coverage.saved * 100)}% less ink than the design as drawn ({Math.round(coverage.asDesigned * 100)}%).
+                                    </p>
+                                )}
+                                <p className="mt-1 text-[11px] text-zinc-400">Rough estimate for comparing layouts, not millilitres.</p>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="rounded-xl border border-zinc-200 bg-white p-4">
                         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-400">Paper</h2>
                         <div className="mb-3 grid grid-cols-3 gap-1">

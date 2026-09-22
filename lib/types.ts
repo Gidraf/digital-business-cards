@@ -249,6 +249,10 @@ export interface PrintItem {
 export type PaperName = "A4" | "A3" | "A5" | "Letter" | "Legal" | "custom";
 
 export interface PrintLayoutSettings {
+    /** ink saving for print: "off" | "saver" | "max" (see lib/ink.ts) */
+    ink?: import("./ink").InkMode;
+    /** print with black ink only */
+    grayscale?: boolean;
     margin_mm: number;
     gap_mm: number;
     crop_marks: boolean;
