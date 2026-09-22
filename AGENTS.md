@@ -18,6 +18,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Print pipeline**: items → `printMaterials` → `expandItems` (inline images as data URIs,
   QR) → `buildSheetHtml` (mm-accurate, `@page` sized) → preview iframe / `window.print()` /
   `POST …/render` (Playwright PDF in CVPAP). Back pages are column-mirrored for duplex.
+- **Pricing/reports**: rules live in CVPAP `cards_settings.pricing` (per kind: unit_price,
+  min_quantity, tiers[{per_sheet, price}]); `lib/pricing.ts` mirrors `settings_view.py`
+  (tier with largest per_sheet <= actual wins). The Print Studio computes the quote
+  client-side and saves it on the job; `POST …/print-jobs/<id>/printed` logs a
+  `cards_print_events` row (browser print auto-logs; "Mark as printed" for reprints/PDF).
+  `GET …/reports?from&to` aggregates per day.
 - Units: template `config` is in px (designer canvas); `width_mm`/`height_mm` is the
   physical size. `MM_PX = 96/25.4` converts for print.
 - Run locally: CVPAP API on :5000 (`python run.py` in ../CVPAP), `yarn dev` here. The

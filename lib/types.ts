@@ -277,9 +277,50 @@ export interface PrintJob {
     page_count: number;
     card_count: number;
     error: string | null;
+    quote: Partial<import("./pricing").Quote>;
+    printed_count: number;
+    printed_sheets: number;
+    last_printed_at: string | null;
     created_at: string | null;
     updated_at: string | null;
     rendered_at: string | null;
+}
+
+export interface PrintEvent {
+    id: string;
+    partner_id: string;
+    job_id: string | null;
+    job_name: string;
+    kind: CardKind;
+    method: "browser" | "pdf" | "manual";
+    cards: number;
+    sheets: number;
+    amount: number;
+    paper: string;
+    lines: import("./pricing").QuoteLine[];
+    note: string | null;
+    created_at: string | null;
+}
+
+export interface ReportDay {
+    date: string;
+    created_designs: number;
+    created_people: number;
+    created_templates: number;
+    created_jobs: number;
+    prints: number;
+    printed_cards: number;
+    printed_sheets: number;
+    revenue: number;
+}
+
+export interface Report {
+    from: string;
+    to: string;
+    days: ReportDay[];
+    totals: Omit<ReportDay, "date">;
+    by_kind: { kind: CardKind; prints: number; cards: number; sheets: number; revenue: number }[];
+    events: PrintEvent[];
 }
 
 export interface PrintMaterials {

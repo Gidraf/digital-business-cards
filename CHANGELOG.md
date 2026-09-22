@@ -21,6 +21,9 @@ All notable changes to this project will be documented in this file.
   mirrored for duplex. `Print` (browser dialog) and `Save as PDF` (Chromium render in
   CVPAP, stored in MinIO).
 - Built-in business-card back sides ("If found, please return to…", QR back).
+- **Shop pricing** (per kind: base price, minimum quantity, tiers by cards-per-sheet), a live
+  quote in the Print Studio, print logging and a **Reports** page (created/printed per day,
+  sheets, revenue, by card type).
 
 ### Removed
 - Supabase auth/storage, Google OAuth and magic links, guest mode, the `/create` quick

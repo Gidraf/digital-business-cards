@@ -7,15 +7,18 @@ import { clientApi, ApiError } from "@/lib/api";
 import { getKind, DESIGN_KINDS } from "@/lib/card-kinds";
 import { personCardData } from "@/lib/card-data";
 import {
-    DEFAULT_LAYOUT, PAPERS, buildSheetHtml, expandItems, inlineImageUrl, layoutSummary, paperSize,
+    DEFAULT_LAYOUT, PAPERS, buildSheetHtml, computeGrid, expandItems, inlineImageUrl, layoutSummary, paperSize,
     type CardInstance,
 } from "@/lib/print-layout";
+import { EMPTY_PRICING, buildQuote, money, quoteLine, type Pricing, type Quote } from "@/lib/pricing";
+import { fmtDateTime } from "@/lib/format";
 import type { CardKind, CardTemplate, Company, Design, PaperName, Person, PrintItem, PrintJob, PrintLayoutSettings, PrintMaterials } from "@/lib/types";
 import CardPreviewRenderer from "../designer/CardPreviewRenderer";
 import { useToast } from "../ToastProvider";
 
 interface PrintStudioProps {
     job?: PrintJob;
+    pricing?: Pricing;
     companies: Company[];
     people: Person[];
     designs: Design[];
@@ -29,7 +32,7 @@ function newKey() {
     return crypto.randomUUID();
 }
 
-export default function PrintStudio({ job, companies, people, designs, templates, seed }: PrintStudioProps) {
+export default function PrintStudio({ job, pricing = EMPTY_PRICING, companies, people, designs, templates, seed }: PrintStudioProps) {
     const router = useRouter();
     const { toast } = useToast();
 
@@ -51,6 +54,9 @@ export default function PrintStudio({ job, companies, people, designs, templates
         return seeded;
     });
     const [pdfUrl, setPdfUrl] = useState<string | null>(job?.pdf_url ?? null);
+    const [printedCount, setPrintedCount] = useState<number>(job?.printed_count ?? 0);
+    const [lastPrintedAt, setLastPrintedAt] = useState<string | null>(job?.last_printed_at ?? null);
+    const [markCopies, setMarkCopies] = useState(1);
     const [pageCount, setPageCount] = useState<number>(job?.page_count ?? 0);
     const [status, setStatus] = useState<PrintJob["status"]>(job?.status ?? "draft");
 
@@ -130,6 +136,23 @@ export default function PrintStudio({ job, companies, people, designs, templates
     }, [cards.length, perOrientation]);
     const page = paperSize(paper, orientation);
     const totalCards = items.reduce((n, it) => n + (it.quantity || 0), 0);
+
+    // Quote: per row, price/card depends on how many of THAT card fit on a sheet
+    const quote: Quote = useMemo(() => {
+        const lines = items.map((it) => {
+            const kind = it.source === "person" ? "business_card" : (designs.find((d) => d.id === it.source_id)?.kind ?? "event");
+            const tplId = it.template_id ?? (it.source === "person" ? people.find((p) => p.id === it.source_id)?.template_id : designs.find((d) => d.id === it.source_id)?.template_id) ?? null;
+            const tpl = templates.find((t) => t.id === tplId);
+            const scale = layout.scale > 0 ? layout.scale : 1;
+            const perSheet = tpl ? Math.max(1, computeGrid(page, (layout.card_width_mm ?? tpl.width_mm) * scale, (layout.card_height_mm ?? tpl.height_mm) * scale, layout).perPage) : 1;
+            const label = it.source === "person"
+                ? (() => { const p = people.find((x) => x.id === it.source_id); return p ? `${p.first_name} ${p.last_name}`.trim() : "Person"; })()
+                : (designs.find((x) => x.id === it.source_id)?.name ?? "Design");
+            return quoteLine(pricing, { label, kind, quantity: it.quantity, per_sheet: perSheet });
+        });
+        return buildQuote(pricing, lines, summary?.pages ?? 0);
+    }, [items, designs, people, templates, layout, page, pricing, summary?.pages]);
+    const currency = pricing.currency || "KES";
     const jobKind: CardKind = (() => {
         const first = items[0];
         if (!first) return "business_card";
@@ -207,6 +230,7 @@ export default function PrintStudio({ job, companies, people, designs, templates
             orientation,
             items: plainItems,
             layout,
+            quote,
         };
         try {
             const saved = jobId ? await api.updatePrintJob(jobId, body) : await api.createPrintJob(body);
@@ -251,7 +275,30 @@ export default function PrintStudio({ job, companies, people, designs, templates
         }
     }
 
-    function handlePrint() {
+    async function logPrint(id: string, method: "browser" | "pdf" | "manual", copies = 1, note?: string) {
+        try {
+            const res = await clientApi().recordPrint(id, { method, copies, cards: totalCards, sheets: summary?.pages ?? 0, amount: quote.total, note });
+            setPrintedCount(res.print_job.printed_count);
+            setLastPrintedAt(res.print_job.last_printed_at);
+            return true;
+        } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Could not record the print");
+            return false;
+        }
+    }
+
+    async function handleMarkPrinted() {
+        if (cards.length === 0) return;
+        setBusy("save"); setError(null);
+        const id = await saveJob();
+        if (id && (await logPrint(id, "manual", markCopies))) {
+            toast(`Recorded ${markCopies * totalCards} cards · ${money(quote.total * markCopies, currency)}`);
+            router.refresh();
+        }
+        setBusy(null);
+    }
+
+    async function handlePrint() {
         if (!sheet || cards.length === 0) { setError("Nothing to print yet"); return; }
         setBusy("print");
         // a dedicated print window gets the exact @page size (the preview iframe is scaled)
@@ -261,6 +308,12 @@ export default function PrintStudio({ job, companies, people, designs, templates
         w.document.open();
         w.document.write(clean.html.replace("</body>", `<script>window.addEventListener('load',function(){setTimeout(function(){window.focus();window.print();},400);});</script></body>`));
         w.document.close();
+        // record the print for the shop reports (job is saved first so the quote is on file)
+        const id = await saveJob();
+        if (id && (await logPrint(id, "browser"))) {
+            toast(`Print recorded: ${totalCards} cards · ${money(quote.total, currency)}`);
+            router.refresh();
+        }
         setBusy(null);
     }
 
@@ -291,6 +344,11 @@ export default function PrintStudio({ job, companies, people, designs, templates
                     className="w-full max-w-md rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium outline-none focus:border-zinc-500"
                 />
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${status === "ready" ? "bg-emerald-50 text-emerald-700" : status === "failed" ? "bg-red-50 text-red-600" : status === "rendering" ? "bg-amber-50 text-amber-700" : "bg-zinc-100 text-zinc-600"}`}>{status}</span>
+                {printedCount > 0 && (
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700" title={lastPrintedAt ? `Last printed ${fmtDateTime(lastPrintedAt)}` : undefined}>
+                        🖨 {printedCount} printed
+                    </span>
+                )}
                 <div className="ml-auto flex flex-wrap items-center gap-2">
                     <button onClick={handleSave} disabled={busy !== null} className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50">
                         {busy === "save" ? "Saving…" : "Save"}
@@ -583,6 +641,42 @@ export default function PrintStudio({ job, companies, people, designs, templates
                             Back pages are mirrored for a long-edge duplex flip. When printing, set the printer to <b>Actual size / 100%</b> and no margins.
                         </p>
                     </div>
+
+                    {items.length > 0 && (
+                        <div className="rounded-xl border-2 border-[#FF6B35]/40 bg-white p-4 text-sm">
+                            <div className="mb-2 flex items-center justify-between">
+                                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">Price</h2>
+                                <Link href="/settings/pricing" className="text-xs text-sky-600 hover:underline">Edit rates</Link>
+                            </div>
+                            <div className="space-y-1.5">
+                                {quote.lines.map((l, i) => (
+                                    <div key={i} className="flex items-baseline justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-zinc-800">{l.label}</p>
+                                            <p className="text-[11px] text-zinc-500">
+                                                {l.charged_quantity > l.quantity ? `${l.quantity} (min ${l.charged_quantity})` : l.quantity} × {money(l.price_per_card, currency)} · {l.per_sheet}/sheet
+                                            </p>
+                                        </div>
+                                        <span className="shrink-0 font-medium">{money(l.amount, currency)}</span>
+                                    </div>
+                                ))}
+                                {quote.design_fee > 0 && (
+                                    <div className="flex items-baseline justify-between text-zinc-600"><span>Design fee</span><span>{money(quote.design_fee, currency)}</span></div>
+                                )}
+                            </div>
+                            <div className="mt-3 flex items-baseline justify-between border-t border-zinc-200 pt-2">
+                                <span className="font-semibold">Total</span>
+                                <span className="text-lg font-bold text-[#FF6B35]">{money(quote.total, currency)}</span>
+                            </div>
+                            <div className="mt-3 flex items-center gap-2">
+                                <input type="number" min={1} max={50} value={markCopies} onChange={(e) => setMarkCopies(Math.max(1, Number(e.target.value) || 1))} className="w-14 rounded border border-zinc-300 px-2 py-1 text-xs" title="Copies of the whole run" />
+                                <button onClick={handleMarkPrinted} disabled={busy !== null || cards.length === 0} className="flex-1 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50" title="Record that this run was printed (e.g. from the saved PDF)">
+                                    ✓ Mark as printed
+                                </button>
+                            </div>
+                            <p className="mt-2 text-[11px] text-zinc-400">The Print button records automatically. Use this for reprints or when printing from the PDF.</p>
+                        </div>
+                    )}
 
                     {summary && (
                         <div className="rounded-xl border border-zinc-200 bg-white p-4 text-sm">

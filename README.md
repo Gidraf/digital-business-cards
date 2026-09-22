@@ -23,6 +23,7 @@
 - **Drag &amp; drop designer** — text, images, shapes, icons, QR codes, 18 Google fonts, layers, undo/redo. Every template has a physical size in **mm** and an optional **back side** (e.g. *"If found, please return to …"*, bound to live company data).
 - **Print Studio** — pick a paper size (A4, A3, A5, Letter, Legal), portrait/landscape, margins, gap and crop marks; the sheet is imposed N‑up (an A4 takes **10** standard business cards). Mix designs freely on one run — cards 1‑3 one design, 4‑6 another — each row has its own template and quantity. Backs are mirrored for a long‑edge duplex flip.
 - **Print or save** — `Print` opens the browser print dialog at exact size; `Save as PDF` renders the same sheet with Chromium (Playwright) inside CVPAP and stores it in MinIO for download.
+- **Shop pricing &amp; reports** — set what you charge per card type: a base price, a minimum quantity (e.g. business cards KES 3 each, minimum 10 = KES 30) and tiers by *cards per sheet* (flyers 2‑up = 15, 5‑up = 6…). The Print Studio quotes each run live; every `Print` / *Mark as printed* is logged, and **Reports** show cards created and printed per day, sheets used and revenue, by card type.
 - **Digital export** — self‑contained HTML + vCard per person (QR, save‑contact), as before.
 - **CSV bulk import**, per‑company **custom fields** and an **asset library** (logos, backgrounds, icons) stored in MinIO.
 - **CVPAP authentication** — sign in with your CVPAP partner account, or arrive from the CVPAP dashboard's *Cards &amp; Print* link with single sign‑on. All data is partner‑scoped; super‑admins can act on behalf of a partner.
@@ -111,7 +112,8 @@ app/
   companies/           companies & people (business-card data)
   designs/             event / harambee / birthday / baby-shower / wedding / flyer designs
   templates/           template gallery + designer (front & back, mm sizes)
-  print/               print runs & Print Studio
+  print/               print runs & Print Studio (live quote, print log)
+  reports/, settings/pricing/   shop reports and pricing rules
   components/          UI (designer/, print/, modals, lists)
 lib/
   api.ts, api-server.ts, auth.ts, session-server.ts
@@ -119,6 +121,7 @@ lib/
   card-data.ts         person/design → render data, vCard, QR payload
   render-html.ts       card face → static HTML
   print-layout.ts      imposition engine + sheet HTML
+  pricing.ts           quote calculation (tiers by cards-per-sheet, minimum quantity)
   digital-export.ts    HTML + vCard zip
 ```
 

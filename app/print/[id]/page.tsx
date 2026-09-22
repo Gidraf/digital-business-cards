@@ -13,8 +13,8 @@ export default async function PrintJobPage(props: PageProps<"/print/[id]">) {
         if (e instanceof ApiError && e.status === 404) notFound();
         throw e;
     }
-    const [companies, people, designs, templates] = await Promise.all([
-        api.listCompanies(), api.listPeople(), api.listDesigns(), api.listTemplates(undefined, true),
+    const [companies, people, designs, templates, pricingRes] = await Promise.all([
+        api.listCompanies(), api.listPeople(), api.listDesigns(), api.listTemplates(undefined, true), api.getPricing(),
     ]);
-    return <PrintStudio job={job} companies={companies} people={people} designs={designs} templates={templates} />;
+    return <PrintStudio job={job} pricing={pricingRes.pricing} companies={companies} people={people} designs={designs} templates={templates} />;
 }

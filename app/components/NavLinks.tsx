@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
     { href: "/designs", key: "nav_designs" as const, match: (p: string) => p.startsWith("/designs") },
     { href: "/templates", key: "nav_templates" as const, match: (p: string) => p.startsWith("/templates") },
     { href: "/print", key: "nav_print" as const, match: (p: string) => p.startsWith("/print") },
+    { href: "/reports", key: "nav_reports" as const, match: (p: string) => p.startsWith("/reports") || p.startsWith("/settings") },
 ];
 
 export default function NavLinks() {

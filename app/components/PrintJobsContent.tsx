@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { clientApi } from "@/lib/api";
 import { getKind } from "@/lib/card-kinds";
 import type { PrintJob } from "@/lib/types";
+import { fmtDateTime } from "@/lib/format";
 import ConfirmModal from "./ConfirmModal";
 import { useToast } from "./ToastProvider";
 
@@ -56,10 +57,10 @@ export default function PrintJobsContent({ jobs }: { jobs: PrintJob[] }) {
                         <div key={job.id} className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4">
                             <Link href={`/print/${job.id}`} className="min-w-0 flex-1">
                                 <p className="truncate font-semibold text-zinc-900">{job.name}</p>
-                                <p className="text-sm text-zinc-500">
+                                <p className="text-sm text-zinc-500" suppressHydrationWarning>
                                     {getKind(job.kind).emoji} {job.card_count} cards · {job.items.length} design{job.items.length === 1 ? "" : "s"} · {job.paper} {job.orientation}
                                     {job.page_count ? ` · ${job.page_count} pages` : ""}
-                                    {job.updated_at ? ` · ${new Date(job.updated_at).toLocaleString()}` : ""}
+                                    {job.updated_at ? ` · ${fmtDateTime(job.updated_at)}` : ""}{job.printed_count ? ` · 🖨 ${job.printed_count} printed` : ""}
                                 </p>
                             </Link>
                             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[job.status]}`}>{job.status}</span>

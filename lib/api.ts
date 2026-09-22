@@ -7,9 +7,10 @@
  */
 import { getClientSession, getClientToken } from "./auth";
 import type {
-    Asset, CardKind, CardTemplate, Company, Design, Person, PrintItem,
-    PrintJob, PrintMaterials, TemplateConfig,
+    Asset, CardKind, CardTemplate, Company, Design, Person, PrintEvent, PrintItem,
+    PrintJob, PrintMaterials, Report, TemplateConfig,
 } from "./types";
+import type { Pricing } from "./pricing";
 
 export class ApiError extends Error {
     status: number;
@@ -143,6 +144,15 @@ export function createApi(ctx: ApiContext) {
         printJobMaterials: (id: string) => request<PrintMaterials>(ctx, s(`/print-jobs/${id}/materials`)),
         printMaterials: (items: PrintItem[]) => request<PrintMaterials>(ctx, s("/print-materials"), { method: "POST", body: JSON.stringify({ items }) }),
         renderPrintJob: (id: string, html: string) => request<{ print_job: PrintJob }>(ctx, s(`/print-jobs/${id}/render`), { method: "POST", body: JSON.stringify({ html }) }).then((r) => r.print_job),
+        recordPrint: (id: string, body: { method: "browser" | "pdf" | "manual"; copies?: number; cards?: number; sheets?: number; amount?: number; note?: string }) => request<{ event: PrintEvent; print_job: PrintJob }>(ctx, s(`/print-jobs/${id}/printed`), { method: "POST", body: JSON.stringify(body) }),
+        listPrintEvents: (jobId?: string) => request<{ events: PrintEvent[] }>(ctx, s(`/print-events${jobId ? `?job_id=${jobId}` : ""}`)).then((r) => r.events),
+        deletePrintEvent: (id: string) => request<{ deleted: boolean }>(ctx, s(`/print-events/${id}`), { method: "DELETE" }),
+
+        // ── pricing & reports ────────────────────────────────────────────
+        getPricing: () => request<{ pricing: Pricing; defaults: Pricing }>(ctx, s("/pricing")),
+        updatePricing: (pricing: Pricing) => request<{ pricing: Pricing }>(ctx, s("/pricing"), { method: "PUT", body: JSON.stringify({ pricing }) }).then((r) => r.pricing),
+        reports: (from?: string, to?: string) => request<Report>(ctx, s(`/reports?${from ? `from=${from}&` : ""}${to ? `to=${to}` : ""}`)),
+
         printJobPdfUrl: (id: string, inline = false) => `${apiBase()}${s(`/print-jobs/${id}/pdf${inline ? "?inline=1" : ""}`)}`,
         renderPdf: async (html: string, filename = "cards"): Promise<Blob> => {
             const headers = new Headers({ "Content-Type": "application/json" });

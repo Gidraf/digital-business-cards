@@ -48,9 +48,9 @@ export default function DashboardContent({ partnerName, summary, companies, temp
                     <p className="text-sm text-zinc-500">{t.dash_templates}</p>
                     <p className="mt-1 text-2xl font-bold">{summary.templates}<span className="ml-1 text-sm font-normal text-zinc-400">+{summary.builtin_templates} built-in</span></p>
                 </Link>
-                <Link href="/print" className="rounded-xl border border-zinc-200 bg-white p-5 transition hover:shadow-sm">
+                <Link href="/reports" className="rounded-xl border border-zinc-200 bg-white p-5 transition hover:shadow-sm">
                     <p className="text-sm text-zinc-500">{t.nav_print}</p>
-                    <p className="mt-1 text-2xl font-bold">{summary.print_jobs}</p>
+                    <p className="mt-1 text-2xl font-bold">{summary.print_jobs}<span className="ml-1 text-sm font-normal text-zinc-400">runs · reports →</span></p>
                 </Link>
             </div>
 
