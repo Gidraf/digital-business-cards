@@ -2,12 +2,10 @@
 
 import { useState, useRef } from "react";
 import Papa from "papaparse";
-import { createClient } from "@/lib/supabase/client";
-import { TABLES } from "@/lib/supabase/constants";
-import { isGuestMode } from "@/lib/guest-store";
-import { useGuest } from "./GuestProvider";
+import { useRouter } from "next/navigation";
+import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
-import type { CustomFieldDefinition } from "@/lib/types";
+import type { CardTemplate, CustomFieldDefinition } from "@/lib/types";
 
 const KNOWN_FIELDS = ["first_name", "last_name", "academic_prefix", "academic_suffix", "title", "email", "phone", "address"] as const;
 type KnownField = typeof KNOWN_FIELDS[number];
@@ -75,15 +73,10 @@ function autoMapColumn(header: string): KnownField | "skip" {
     return HEADER_ALIASES[normalized] ?? "skip";
 }
 
-interface Template {
-    id: string;
-    name: string;
-}
-
 interface BulkImportModalProps {
     onClose: () => void;
     companyId: string;
-    templates: Template[];
+    templates: CardTemplate[];
     customFieldDefs?: CustomFieldDefinition[];
 }
 
@@ -92,7 +85,7 @@ interface ParsedRow {
 }
 
 export default function BulkImportModal({ onClose, companyId, templates, customFieldDefs }: BulkImportModalProps) {
-    const guest = useGuest();
+    const router = useRouter();
     const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [step, setStep] = useState<"upload" | "map" | "preview" | "done">("upload");
@@ -212,33 +205,7 @@ export default function BulkImportModal({ onClose, companyId, templates, customF
             return;
         }
 
-        if (isGuestMode()) {
-            for (const row of mapped) {
-                guest.addPerson({
-                    company_id: companyId,
-                    template_id: templateId,
-                    first_name: row.first_name,
-                    last_name: row.last_name,
-                    academic_prefix: row.academic_prefix,
-                    academic_suffix: row.academic_suffix,
-                    address: row.address,
-                    title: row.title,
-                    email: row.email,
-                    phone: row.phone,
-                    photo_url: null,
-                    custom_fields: row.custom_fields,
-                });
-            }
-            setImportedCount(mapped.length);
-            setStep("done");
-            setImporting(false);
-            return;
-        }
-
-        const supabase = createClient();
         const people = mapped.map((row) => ({
-            company_id: companyId,
-            template_id: templateId,
             first_name: row.first_name,
             last_name: row.last_name,
             academic_prefix: row.academic_prefix,
@@ -247,18 +214,21 @@ export default function BulkImportModal({ onClose, companyId, templates, customF
             title: row.title,
             email: row.email,
             phone: row.phone,
-            photo_url: null,
             custom_fields: row.custom_fields,
         }));
 
-        const { error: insertError } = await supabase.from(TABLES.PEOPLE).insert(people);
-        if (insertError) {
-            setError(insertError.message);
+        let created = mapped.length;
+        try {
+            const res = await clientApi().bulkCreatePeople(companyId, people, templateId || null);
+            created = res.created;
+        } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Import failed");
             setImporting(false);
             return;
         }
+        router.refresh();
 
-        setImportedCount(mapped.length);
+        setImportedCount(created);
         setStep("done");
         setImporting(false);
     }
@@ -461,7 +431,7 @@ export default function BulkImportModal({ onClose, companyId, templates, customF
                         <button
                             onClick={() => {
                                 onClose();
-                                window.location.reload();
+                                router.refresh();
                             }}
                             className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700"
                         >

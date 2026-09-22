@@ -27,10 +27,7 @@ export default function EditCompanyButton({ id, name, domain, website, address, 
             </button>
             {showModal && (
                 <CompanyModal
-                    onClose={() => {
-                        setShowModal(false);
-                        window.location.reload();
-                    }}
+                    onClose={() => setShowModal(false)}
                     id={id}
                     name={name}
                     domain={domain}

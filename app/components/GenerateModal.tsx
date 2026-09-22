@@ -2,14 +2,9 @@
 
 import { useState } from "react";
 import { useTranslation } from "./I18nProvider";
-
-interface Person {
-    id: string;
-    first_name: string;
-    last_name: string;
-    title: string;
-    photoSignedUrl: string | null;
-}
+import { clientApi } from "@/lib/api";
+import { exportDigitalCards } from "@/lib/digital-export";
+import type { Person } from "@/lib/types";
 
 interface GenerateModalProps {
     companyId: string;
@@ -45,15 +40,16 @@ export default function GenerateModal({ companyId, people, onClose }: GenerateMo
         if (selected.size === 0) return;
         setGenerating(true);
 
-        const ids = Array.from(selected).join(",");
-        const res = await fetch(`/api/generate/${companyId}?people=${ids}`);
-        if (!res.ok) {
+        let blob: Blob;
+        try {
+            blob = await exportDigitalCards(clientApi(), Array.from(selected));
+        } catch {
             alert("Failed to generate cards");
             setGenerating(false);
             return;
         }
+        void companyId;
 
-        const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -111,16 +107,16 @@ export default function GenerateModal({ companyId, people, onClose }: GenerateMo
                                 onChange={() => toggle(person.id)}
                                 className="rounded border-zinc-300"
                             />
-                            {person.photoSignedUrl ? (
+                            {person.photo_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
-                                    src={person.photoSignedUrl}
+                                    src={person.photo_url}
                                     alt={`${person.first_name} ${person.last_name}`}
                                     className="h-8 w-8 shrink-0 rounded-full object-cover"
                                 />
                             ) : (
                                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-medium text-zinc-500">
-                                    {person.first_name[0]}{person.last_name[0]}
+                                    {person.first_name?.[0]}{person.last_name?.[0]}
                                 </div>
                             )}
                             <div>

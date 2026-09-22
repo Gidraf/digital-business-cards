@@ -1,164 +1,90 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { STORAGE } from "@/lib/supabase/constants";
-
-interface AssetInfo {
-    name: string;
-    displayName: string;
-    storagePath: string;
-    signedUrl?: string;
-}
+import { clientApi } from "@/lib/api";
+import type { Asset } from "@/lib/types";
 
 interface AssetPickerProps {
-    companyId: string;
+    /** scope the library to a company (shared assets are always included) */
+    companyId?: string | null;
     currentSource?: string;
     onSelect: (source: string) => void;
+    /** labels for the built-in data-driven sources of the current card kind */
+    imageSlots?: { key: "logo" | "photo"; label: string }[];
+    /** notify parent so the canvas can preview the new asset immediately */
+    onAssetUrl?: (id: string, url: string) => void;
 }
 
-function parseDisplayName(filename: string): string {
-    // Strip UUID prefix: "a1b2c3-original-name.png" -> "original-name.png"
-    const dashIndex = filename.indexOf("-");
-    if (dashIndex > 0 && dashIndex < 10) {
-        return filename.slice(dashIndex + 1);
-    }
-    return filename;
-}
-
-export default function AssetPicker({ companyId, currentSource, onSelect }: AssetPickerProps) {
-    const [assets, setAssets] = useState<AssetInfo[]>([]);
+export default function AssetPicker({ companyId, currentSource, onSelect, imageSlots, onAssetUrl }: AssetPickerProps) {
+    const [assets, setAssets] = useState<Asset[]>([]);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-
     const loadAssetsRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
     useEffect(() => {
+        let cancelled = false;
         loadAssetsRef.current = async () => {
             setLoading(true);
-            const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { setLoading(false); return; }
-
-            const folder = `${user.id}/${companyId}`;
-            const { data: files } = await supabase.storage
-                .from(STORAGE.ASSETS)
-                .list(folder, { sortBy: { column: "created_at", order: "desc" } });
-
-            if (files) {
-                const assetList: AssetInfo[] = [];
-                for (const file of files) {
-                    if (file.name === ".emptyFolderPlaceholder") continue;
-                    const storagePath = `${folder}/${file.name}`;
-                    const { data } = await supabase.storage
-                        .from(STORAGE.ASSETS)
-                        .createSignedUrl(storagePath, 3600);
-                    assetList.push({
-                        name: file.name,
-                        displayName: parseDisplayName(file.name),
-                        storagePath,
-                        signedUrl: data?.signedUrl ?? undefined,
-                    });
+            try {
+                const list = await clientApi().listAssets(companyId ?? null);
+                if (!cancelled) {
+                    setAssets(list);
+                    for (const a of list) if (a.url) onAssetUrl?.(a.id, a.url);
                 }
-                setAssets(assetList);
-            }
-            setLoading(false);
-        };
-    }, [companyId]);
-
-    useEffect(() => {
-        if (!companyId) return;
-        let cancelled = false;
-        async function load() {
-            setLoading(true);
-            const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (cancelled) return;
-            if (!user) { setLoading(false); return; }
-
-            const folder = `${user.id}/${companyId}`;
-            const { data: files } = await supabase.storage
-                .from(STORAGE.ASSETS)
-                .list(folder, { sortBy: { column: "created_at", order: "desc" } });
-
-            if (cancelled) return;
-            if (files) {
-                const assetList: AssetInfo[] = [];
-                for (const file of files) {
-                    if (file.name === ".emptyFolderPlaceholder") continue;
-                    const storagePath = `${folder}/${file.name}`;
-                    const { data } = await supabase.storage
-                        .from(STORAGE.ASSETS)
-                        .createSignedUrl(storagePath, 3600);
-                    assetList.push({
-                        name: file.name,
-                        displayName: parseDisplayName(file.name),
-                        storagePath,
-                        signedUrl: data?.signedUrl ?? undefined,
-                    });
-                }
-                if (!cancelled) setAssets(assetList);
-            }
+            } catch { /* ignore */ }
             if (!cancelled) setLoading(false);
-        }
-        load();
+        };
+        loadAssetsRef.current();
         return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [companyId]);
 
     async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
-
         setUploading(true);
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setUploading(false); return; }
-
-        const prefix = crypto.randomUUID().slice(0, 8);
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `${user.id}/${companyId}/${prefix}-${safeName}`;
-
-        const { error } = await supabase.storage
-            .from(STORAGE.ASSETS)
-            .upload(storagePath, file, { contentType: file.type });
-
-        if (error) {
-            alert(error.message);
+        try {
+            const [created] = await clientApi().uploadAssets([file], companyId ?? null);
+            await loadAssetsRef.current?.();
+            if (created) {
+                if (created.url) onAssetUrl?.(created.id, created.url);
+                onSelect(`asset:${created.id}`);
+            }
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Upload failed");
+        } finally {
             setUploading(false);
-            return;
-        }
-
-        await loadAssetsRef.current?.();
-        onSelect(`asset:${storagePath}`);
-        setUploading(false);
-
-        if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-
-    async function handleDelete(asset: AssetInfo) {
-        const supabase = createClient();
-        await supabase.storage.from(STORAGE.ASSETS).remove([asset.storagePath]);
-        await loadAssetsRef.current?.();
-        if (currentSource === `asset:${asset.storagePath}`) {
-            onSelect("logo");
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     }
 
+    async function handleDelete(asset: Asset) {
+        await clientApi().deleteAsset(asset.id);
+        await loadAssetsRef.current?.();
+        if (currentSource === `asset:${asset.id}`) {
+            onSelect(imageSlots?.[0]?.key ?? "logo");
+        }
+    }
+
+    const slots = imageSlots ?? [{ key: "logo", label: "Company logo" }, { key: "photo", label: "Person photo" }];
 
     return (
         <div className="space-y-2">
             <label className="mb-1 block text-xs font-medium text-zinc-500">Source</label>
 
-            {/* Built-in sources */}
+            {/* Data-driven sources */}
             <div className="flex gap-1">
-                <button
-                    type="button"
-                    onClick={() => onSelect("photo")}
-                    className={`flex-1 rounded px-2 py-1 text-xs ${currentSource === "photo" ? "bg-zinc-900 text-white" : "bg-zinc-100 hover:bg-zinc-200"}`}
-                >
-                    Person Photo
-                </button>
+                {slots.map((slot) => (
+                    <button
+                        key={slot.key}
+                        type="button"
+                        onClick={() => onSelect(slot.key)}
+                        className={`flex-1 rounded px-2 py-1 text-xs ${currentSource === slot.key ? "bg-zinc-900 text-white" : "bg-zinc-100 hover:bg-zinc-200"}`}
+                    >
+                        {slot.label}
+                    </button>
+                ))}
             </div>
 
             {/* Asset list */}
@@ -168,23 +94,24 @@ export default function AssetPicker({ companyId, currentSource, onSelect }: Asse
                 <div className="max-h-36 space-y-1 overflow-y-auto">
                     {assets.map((asset) => (
                         <div
-                            key={asset.storagePath}
+                            key={asset.id}
                             className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs ${
-                                currentSource === `asset:${asset.storagePath}`
+                                currentSource === `asset:${asset.id}`
                                     ? "border-sky-400 bg-sky-50"
                                     : "border-zinc-200 hover:bg-zinc-50"
                             }`}
                         >
-                            {asset.signedUrl && (
+                            {asset.url && (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={asset.signedUrl} alt="" className="h-6 w-6 rounded object-contain" />
+                                <img src={asset.url} alt="" className="h-6 w-6 rounded object-contain" />
                             )}
                             <button
                                 type="button"
-                                onClick={() => onSelect(`asset:${asset.storagePath}`)}
+                                onClick={() => onSelect(`asset:${asset.id}`)}
                                 className="flex-1 truncate text-left"
+                                title={asset.name}
                             >
-                                {asset.displayName}
+                                {asset.name}{!asset.company_id && <span className="ml-1 text-[10px] text-zinc-400">shared</span>}
                             </button>
                             <button
                                 type="button"

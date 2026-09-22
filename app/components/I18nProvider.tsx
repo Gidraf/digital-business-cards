@@ -40,7 +40,9 @@ export default function I18nProvider({ children }: { children: React.ReactNode }
     const [lang, setLangState] = useState<LangCode>("en");
 
     useEffect(() => {
-        setLangState(detectLang());
+        // language lives in localStorage / navigator — read it after hydration
+        const id = window.setTimeout(() => setLangState(detectLang()), 0);
+        return () => window.clearTimeout(id);
     }, []);
 
     function setLang(newLang: LangCode) {

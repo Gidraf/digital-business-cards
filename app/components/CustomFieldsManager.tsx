@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { TABLES } from "@/lib/supabase/constants";
+import { clientApi } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
 import type { CustomFieldDefinition } from "@/lib/types";
 
@@ -37,12 +36,11 @@ export default function CustomFieldsManager({ companyId, initialDefs }: CustomFi
 
     async function saveDefs(updated: CustomFieldDefinition[]) {
         setSaving(true);
-        const supabase = createClient();
-        await supabase
-            .from(TABLES.COMPANIES)
-            .update({ custom_field_definitions: updated })
-            .eq("id", companyId);
-        setSaving(false);
+        try {
+            await clientApi().updateCompany(companyId, { custom_field_definitions: updated });
+        } finally {
+            setSaving(false);
+        }
     }
 
     return (

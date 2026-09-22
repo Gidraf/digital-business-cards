@@ -1,14 +1,16 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { STORAGE } from "@/lib/supabase/constants";
-import type { CardElement } from "@/lib/types";
+import { clientApi } from "@/lib/api";
+import type { CardElement, CardKind } from "@/lib/types";
+import { getKind } from "@/lib/card-kinds";
 import IconPicker from "./IconPicker";
 
 interface ElementsToolbarProps {
     onAddElement: (element: CardElement) => void;
-    companyId?: string;
+    companyId?: string | null;
+    kind?: CardKind;
+    onAssetUrl?: (id: string, url: string) => void;
 }
 
 function createId() {
@@ -17,7 +19,9 @@ function createId() {
 
 const BTN = "flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium shadow-sm transition hover:bg-zinc-50 hover:shadow-md";
 
-export default function ElementsToolbar({ onAddElement, companyId }: ElementsToolbarProps) {
+export default function ElementsToolbar({ onAddElement, companyId, kind = "business_card", onAssetUrl }: ElementsToolbarProps) {
+    const kindDef = getKind(kind);
+    const defaultField = kindDef.fields[0]?.key ?? "custom";
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploading, setUploading] = useState(false);
     const [showShapes, setShowShapes] = useState(false);
@@ -25,7 +29,7 @@ export default function ElementsToolbar({ onAddElement, companyId }: ElementsToo
     function addText() {
         onAddElement({
             id: createId(), type: "text", x: 20, y: 20, width: 160, height: 30, zIndex: 10,
-            boundField: "full_name", fontSize: 16, fontFamily: "Inter, sans-serif", fontWeight: "600", color: "#1a1a1a", textAlign: "left",
+            boundField: kind === "business_card" ? "full_name_with_titles" : defaultField, fontSize: 16, fontFamily: "Inter, sans-serif", fontWeight: "600", color: "#1a1a1a", textAlign: "left",
         });
     }
 
@@ -83,30 +87,24 @@ export default function ElementsToolbar({ onAddElement, companyId }: ElementsToo
 
     async function handleUploadImage(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
-        if (!file || !companyId) return;
+        if (!file) return;
 
         setUploading(true);
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setUploading(false); return; }
-
-        const prefix = crypto.randomUUID().slice(0, 8);
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `${user.id}/${companyId}/${prefix}-${safeName}`;
-
-        const { error } = await supabase.storage
-            .from(STORAGE.ASSETS)
-            .upload(storagePath, file, { contentType: file.type });
-
-        if (error) { alert(error.message); setUploading(false); return; }
-
-        onAddElement({
-            id: createId(), type: "image", x: 20, y: 20, width: 150, height: 100, zIndex: 10,
-            imageSource: `asset:${storagePath}`, objectFit: "contain", borderRadius: 0,
-        });
-
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        try {
+            const [asset] = await clientApi().uploadAssets([file], companyId ?? null);
+            if (asset) {
+                if (asset.url) onAssetUrl?.(asset.id, asset.url);
+                onAddElement({
+                    id: createId(), type: "image", x: 20, y: 20, width: 150, height: 100, zIndex: 10,
+                    imageSource: `asset:${asset.id}`, objectFit: "contain", borderRadius: 0,
+                });
+            }
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Upload failed");
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
     }
 
     return (
@@ -166,13 +164,15 @@ export default function ElementsToolbar({ onAddElement, companyId }: ElementsToo
                 QR
             </button>
 
-            {/* Save Contact */}
+            {/* Save Contact (digital business cards only) */}
+            {kind === "business_card" && (
             <button onClick={addSaveContact} className={BTN}>
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
                 Save Contact
             </button>
+            )}
 
             {/* Icons */}
             <IconPicker onAddIcon={onAddElement} />
@@ -181,7 +181,7 @@ export default function ElementsToolbar({ onAddElement, companyId }: ElementsToo
             <div className="mx-1 h-6 w-px bg-zinc-200" />
 
             {/* Upload image */}
-            {companyId ? (
+            {(
                 <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-700 shadow-sm transition hover:bg-sky-100 hover:shadow-md">
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
@@ -189,8 +189,6 @@ export default function ElementsToolbar({ onAddElement, companyId }: ElementsToo
                     {uploading ? "Uploading..." : "Upload"}
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleUploadImage} className="hidden" disabled={uploading} />
                 </label>
-            ) : (
-                <span className="text-xs text-zinc-400">Select a company to upload</span>
             )}
         </div>
     );

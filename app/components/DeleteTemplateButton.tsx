@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { TABLES } from "@/lib/supabase/constants";
+import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
 import ConfirmModal from "./ConfirmModal";
 
@@ -18,11 +17,10 @@ export default function DeleteTemplateButton({ templateId, templateName }: Delet
     const [showConfirm, setShowConfirm] = useState(false);
 
     async function handleDelete() {
-        const supabase = createClient();
-        const { error } = await supabase.from(TABLES.TEMPLATES).delete().eq("id", templateId);
-
-        if (error) {
-            alert(error.message);
+        try {
+            await clientApi().deleteTemplate(templateId);
+        } catch (err) {
+            alert(err instanceof ApiError ? err.message : "Could not delete template");
             return;
         }
 

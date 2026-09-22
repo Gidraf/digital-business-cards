@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Rnd } from "react-rnd";
+import { textWraps } from "@/lib/render-html";
 import type { CardElement, SampleCardData } from "@/lib/types";
 
 const SNAP_THRESHOLD = 8;
@@ -259,9 +260,11 @@ export default function DesignerCanvas({
                                               ? "flex-end"
                                               : "flex-start",
                                     boxShadow: el.boxShadow ?? undefined,
+                                    whiteSpace: textWraps(el) ? "pre-wrap" : "nowrap",
+                                    wordBreak: textWraps(el) ? "break-word" : undefined,
                                 }}
                             >
-                                {getDisplayText(el, sampleData)}
+                                <span style={{ display: "block", width: "100%" }}>{getDisplayText(el, sampleData)}</span>
                             </div>
                         )}
 

@@ -17,10 +17,7 @@ export default function AddCompanyButton() {
             </button>
             {isOpen && (
                 <CompanyModal
-                    onClose={() => {
-                        setIsOpen(false);
-                        window.location.reload();
-                    }}
+                    onClose={() => setIsOpen(false)}
                     name=""
                     domain=""
                     website=""

@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { STORAGE, TABLES } from "@/lib/supabase/constants";
-import { isGuestMode } from "@/lib/guest-store";
-import { useGuest } from "./GuestProvider";
+import { useRouter } from "next/navigation";
+import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
 import ImageUpload from "./ImageUpload";
 
@@ -20,7 +18,7 @@ interface CompanyProps {
 }
 
 export function CompanyModal(props: CompanyProps) {
-    const guest = useGuest();
+    const router = useRouter();
     const { t } = useTranslation();
     const [name, setName] = useState(props.name);
     const [domain, setDomain] = useState(props.domain);
@@ -28,81 +26,30 @@ export function CompanyModal(props: CompanyProps) {
     const [address, setAddress] = useState(props.address);
     const [logo, setLogo] = useState<File | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
 
     const isEdit = !!props.id;
 
     async function handleSubmit(e: React.SyntheticEvent) {
         e.preventDefault();
         setError(null);
-
-        if (isGuestMode()) {
-            let logoUrl: string | null = null;
+        setSaving(true);
+        const api = clientApi();
+        try {
+            const body = { name, domain, website, address };
+            const company = isEdit && props.id
+                ? await api.updateCompany(props.id, body)
+                : await api.createCompany(body);
             if (logo) {
-                logoUrl = URL.createObjectURL(logo);
-            }
-            if (isEdit && props.id) {
-                guest.updateCompany(props.id, { name, domain, website, address, logo_url: logoUrl ?? undefined });
-            } else {
-                guest.addCompany({ name, domain, website, address, logo_url: logoUrl });
+                await api.uploadLogo(company.id, logo, logo.name);
             }
             props.onClose();
-            return;
+            router.refresh();
+        } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Could not save company");
+        } finally {
+            setSaving(false);
         }
-
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        let logoPath: string | null | undefined = undefined;
-
-        if (logo) {
-            const fileExt = logo.name.split(".").pop();
-            const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from(STORAGE.LOGOS)
-                .upload(filePath, logo);
-
-            if (uploadError) {
-                setError(uploadError.message);
-                return;
-            }
-
-            logoPath = filePath;
-        }
-
-        if (isEdit && props.id) {
-            const updates: Record<string, unknown> = { name, domain, website, address };
-            if (logoPath !== undefined) updates.logo_url = logoPath;
-
-            const { error: updateError } = await supabase
-                .from(TABLES.COMPANIES)
-                .update(updates)
-                .eq("id", props.id);
-
-            if (updateError) {
-                setError(updateError.message);
-                return;
-            }
-        } else {
-            const { error: insertError } = await supabase
-                .from(TABLES.COMPANIES)
-                .insert({
-                    user_id: user.id,
-                    name,
-                    domain,
-                    website,
-                    address,
-                    logo_url: logoPath ?? null,
-                });
-
-            if (insertError) {
-                setError(insertError.message);
-                return;
-            }
-        }
-
-        props.onClose();
     }
 
     return (
@@ -200,9 +147,10 @@ export function CompanyModal(props: CompanyProps) {
                         </button>
                         <button
                             type="submit"
-                            className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+                            disabled={saving}
+                            className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
                         >
-                            {isEdit ? t.modal_save : t.companies_add}
+                            {saving ? "Saving…" : isEdit ? t.modal_save : t.companies_add}
                         </button>
                     </div>
                 </form>

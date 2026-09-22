@@ -8,7 +8,7 @@ Thanks for your interest in contributing! Here's how to get started.
 
 - Node.js 18+
 - Yarn
-- A [Supabase](https://supabase.com) account (free tier works)
+- A running [CVPAP](../CVPAP) backend (Flask + Postgres + MinIO)
 
 ### Local Setup
 
@@ -27,20 +27,15 @@ Thanks for your interest in contributing! Here's how to get started.
    ```bash
    cp .env.example .env.local
    ```
-   Fill in your Supabase URL and anon key.
+   Point `NEXT_PUBLIC_CVPAP_API_URL` at your CVPAP API.
 
-4. **Set up database**
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref YOUR_PROJECT_REF
-   npx supabase db push
-   ```
+4. **Start the CVPAP backend** (in the CVPAP repo: `python run.py` or `docker compose up -d web`) — it creates the `cards_*` tables and seeds the built-in templates on boot.
 
 5. **Run dev server**
    ```bash
    yarn dev
    ```
-   Open [http://localhost:3000](http://localhost:3000).
+   Open [http://localhost:7500](http://localhost:7500).
 
 ## Making Changes
 
@@ -82,22 +77,24 @@ docs: update self-hosting guide
 app/
   api/          — API routes (generate cards, proxy images)
   auth/         — Auth callback and migration
-  companies/    — Company management pages
+  companies/    — Company & people pages (business-card data)
+  designs/      — Event / harambee / birthday / baby-shower / wedding / flyer designs
+  print/        — Print runs + Print Studio (imposition, PDF)
+  templates/    — Template gallery + designer
   components/   — All React components
     designer/   — Card designer components (canvas, layers, properties)
-  create/       — Quick card creation flow
+    print/      — Print Studio
+  api/auth/, auth/sso/ — CVPAP session handling
   login/        — Login page
-  templates/    — Template management pages
 lib/
+  api.ts, api-server.ts — CVPAP API client
+  card-kinds.ts — Card types, fields, sizes, sample data
+  print-layout.ts, render-html.ts — Imposition + static rendering
   i18n/         — Translation strings
-  supabase/     — Supabase client helpers + constants
   fonts.ts      — Google Fonts configuration
   types.ts      — TypeScript types
-  sample-templates.ts — Starter template definitions
-supabase/
-  migrations/   — Database migrations
 ```
 
 ## Questions?
 
-Open a [Discussion](https://github.com/kevinwielander/digital-business-cards/discussions) or file an issue.
+Open an issue in this repository.

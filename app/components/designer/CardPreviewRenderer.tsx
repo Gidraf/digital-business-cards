@@ -1,5 +1,6 @@
 import type { TemplateConfig, SampleCardData, CardElement, LinkBoundField } from "@/lib/types";
 import { getGoogleFontsUrl, getUsedFonts } from "@/lib/fonts";
+import { textWraps } from "@/lib/render-html";
 
 interface CardPreviewRendererProps {
     config: TemplateConfig;
@@ -23,7 +24,7 @@ function getDisplayText(el: CardElement, data: SampleCardData): string {
     if (el.type !== "text" && el.type !== "save-contact") return "";
     if (el.type === "save-contact") return el.customText ?? "Save Contact";
     if (el.boundField === "custom") return el.customText ?? "Custom text";
-    if (el.boundField === "full_name_with_titles") return data.full_name_with_titles;
+    if (el.boundField === "full_name_with_titles") return data.full_name_with_titles ?? "";
     if (el.boundField?.startsWith("custom:")) {
         const key = el.boundField.slice(7);
         return data.custom_fields?.[key] ?? key;
@@ -83,11 +84,14 @@ export default function CardPreviewRenderer({ config, data, assetUrls = {}, scal
                                 lineHeight: el.lineHeight ?? undefined,
                                 textTransform: el.textTransform ?? "none",
                                 textShadow: el.textShadow ?? undefined,
+                                textAlign: align,
                                 overflow: "hidden",
-                                whiteSpace: "nowrap",
+                                whiteSpace: textWraps(el) ? "pre-wrap" : "nowrap",
+                                wordBreak: textWraps(el) ? "break-word" : undefined,
+                                textOverflow: "ellipsis",
                             }}
                         >
-                            {text}
+                            <span style={{ display: "block", width: "100%" }}>{text}</span>
                         </div>
                     );
                 }
@@ -99,12 +103,14 @@ export default function CardPreviewRenderer({ config, data, assetUrls = {}, scal
                         isDataUri ? el.imageSource!.slice(6) :
                         el.imageSource?.startsWith("asset:") ? assetUrls[el.imageSource.slice(6)] ?? null :
                         data.logoUrl;
+                    if (!src && el.hideIfEmpty) return null;
                     const link = resolveLink(el, data);
                     const containerStyle: React.CSSProperties = {
                         ...style,
                         borderRadius: (el.borderRadius ?? 0) * scale,
                         overflow: "hidden",
                         backgroundColor: src ? undefined : "#e4e4e7",
+                        border: el.border ?? undefined,
                         display: "block",
                     };
                     const inner = src ? (

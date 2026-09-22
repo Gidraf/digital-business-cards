@@ -1,29 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { STORAGE } from "@/lib/supabase/constants";
+import { clientApi } from "@/lib/api";
+import type { Asset } from "@/lib/types";
 import { useTranslation } from "./I18nProvider";
 import ConfirmModal from "./ConfirmModal";
 import DropZone from "./DropZone";
 
-interface Asset {
-    name: string;
-    displayName: string;
-    storagePath: string;
-    signedUrl: string;
-}
-
-function parseDisplayName(filename: string): string {
-    const dashIndex = filename.indexOf("-");
-    if (dashIndex > 0 && dashIndex < 10) {
-        return filename.slice(dashIndex + 1);
-    }
-    return filename;
-}
-
 interface CompanyAssetsProps {
-    companyId: string;
+    /** omit for the partner-wide (shared) library */
+    companyId?: string | null;
 }
 
 export default function CompanyAssets({ companyId }: CompanyAssetsProps) {
@@ -36,102 +22,31 @@ export default function CompanyAssets({ companyId }: CompanyAssetsProps) {
     const loadAssetsRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
     useEffect(() => {
-        loadAssetsRef.current = async () => {
-            const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) { setLoading(false); return; }
-
-            const folder = `${user.id}/${companyId}`;
-            const { data: files } = await supabase.storage
-                .from(STORAGE.ASSETS)
-                .list(folder, { sortBy: { column: "created_at", order: "desc" } });
-
-            if (files) {
-                const list: Asset[] = [];
-                for (const file of files) {
-                    if (file.name === ".emptyFolderPlaceholder") continue;
-                    const storagePath = `${folder}/${file.name}`;
-                    const { data } = await supabase.storage
-                        .from(STORAGE.ASSETS)
-                        .createSignedUrl(storagePath, 3600);
-                    if (data?.signedUrl) {
-                        list.push({
-                            name: file.name,
-                            displayName: parseDisplayName(file.name),
-                            storagePath,
-                            signedUrl: data.signedUrl,
-                        });
-                    }
-                }
-                setAssets(list);
-            }
-            setLoading(false);
-        };
-    }, [companyId]);
-
-    useEffect(() => {
         let cancelled = false;
-        async function load() {
-            const supabase = createClient();
-            const { data: { user } } = await supabase.auth.getUser();
-            if (cancelled) return;
-            if (!user) { setLoading(false); return; }
-
-            const folder = `${user.id}/${companyId}`;
-            const { data: files } = await supabase.storage
-                .from(STORAGE.ASSETS)
-                .list(folder, { sortBy: { column: "created_at", order: "desc" } });
-
-            if (cancelled) return;
-            if (files) {
-                const list: Asset[] = [];
-                for (const file of files) {
-                    if (file.name === ".emptyFolderPlaceholder") continue;
-                    const storagePath = `${folder}/${file.name}`;
-                    const { data } = await supabase.storage
-                        .from(STORAGE.ASSETS)
-                        .createSignedUrl(storagePath, 3600);
-                    if (data?.signedUrl) {
-                        list.push({
-                            name: file.name,
-                            displayName: parseDisplayName(file.name),
-                            storagePath,
-                            signedUrl: data.signedUrl,
-                        });
-                    }
-                }
+        loadAssetsRef.current = async () => {
+            try {
+                const list = await clientApi().listAssets(companyId ?? null);
                 if (!cancelled) setAssets(list);
-            }
+            } catch { /* keep previous list */ }
             if (!cancelled) setLoading(false);
-        }
-        load();
+        };
+        loadAssetsRef.current();
         return () => { cancelled = true; };
     }, [companyId]);
 
     async function handleUpload(files: File[]) {
         setUploading(true);
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setUploading(false); return; }
-
-        for (const file of files) {
-            const prefix = crypto.randomUUID().slice(0, 8);
-            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-            const storagePath = `${user.id}/${companyId}/${prefix}-${safeName}`;
-
-            await supabase.storage
-                .from(STORAGE.ASSETS)
-                .upload(storagePath, file, { contentType: file.type });
+        try {
+            await clientApi().uploadAssets(files, companyId ?? null);
+            await loadAssetsRef.current?.();
+        } finally {
+            setUploading(false);
         }
-
-        await loadAssetsRef.current?.();
-        setUploading(false);
     }
 
     async function handleDelete() {
         if (!deleteAsset) return;
-        const supabase = createClient();
-        await supabase.storage.from(STORAGE.ASSETS).remove([deleteAsset.storagePath]);
+        await clientApi().deleteAsset(deleteAsset.id);
         setDeleteAsset(null);
         await loadAssetsRef.current?.();
     }
@@ -141,7 +56,7 @@ export default function CompanyAssets({ companyId }: CompanyAssetsProps) {
             <div className="mb-3">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">Assets</h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                    Images you can use in your business card templates (logos, backgrounds, icons).
+                    Images you can use in your templates (logos, backgrounds, icons).
                 </p>
             </div>
 
@@ -157,19 +72,19 @@ export default function CompanyAssets({ companyId }: CompanyAssetsProps) {
                         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
                             {assets.map((asset) => (
                                 <div
-                                    key={asset.storagePath}
+                                    key={asset.id}
                                     className="group relative overflow-hidden rounded-xl border border-zinc-200 bg-white"
                                 >
                                     <div className="flex h-24 items-center justify-center bg-zinc-50 p-2">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
-                                            src={asset.signedUrl}
-                                            alt={asset.displayName}
+                                            src={asset.url ?? ""}
+                                            alt={asset.name}
                                             className="max-h-full max-w-full object-contain"
                                         />
                                     </div>
                                     <div className="flex items-center justify-between px-2 py-1.5">
-                                        <span className="truncate text-xs text-zinc-600">{asset.displayName}</span>
+                                        <span className="truncate text-xs text-zinc-600">{asset.name}</span>
                                         <button
                                             onClick={() => setDeleteAsset(asset)}
                                             className="hidden shrink-0 text-xs text-zinc-400 hover:text-red-500 group-hover:block"
@@ -202,7 +117,7 @@ export default function CompanyAssets({ companyId }: CompanyAssetsProps) {
             {deleteAsset && (
                 <ConfirmModal
                     title={t.modal_delete}
-                    message={`Delete "${deleteAsset.displayName}"? Templates using this image will show a placeholder instead.`}
+                    message={`Delete "${deleteAsset.name}"? Templates using this image will show a placeholder instead.`}
                     confirmLabel={t.modal_delete}
                     destructive
                     onConfirm={handleDelete}

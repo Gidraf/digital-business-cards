@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { TABLES } from "@/lib/supabase/constants";
+import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
 import ConfirmModal from "./ConfirmModal";
 
@@ -18,16 +17,14 @@ export default function DeleteCompanyButton({ companyId, companyName }: DeleteCo
     const [showConfirm, setShowConfirm] = useState(false);
 
     async function handleDelete() {
-        const supabase = createClient();
-        await supabase.from(TABLES.PEOPLE).delete().eq("company_id", companyId);
-        const { error } = await supabase.from(TABLES.COMPANIES).delete().eq("id", companyId);
-
-        if (error) {
-            alert(error.message);
+        try {
+            await clientApi().deleteCompany(companyId);
+        } catch (err) {
+            alert(err instanceof ApiError ? err.message : "Could not delete company");
             return;
         }
-
         router.push("/companies");
+        router.refresh();
     }
 
     return (

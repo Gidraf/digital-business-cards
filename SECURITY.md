@@ -31,7 +31,7 @@ Instead, please email: **kevin@wielander.dev** (replace with your actual email)
 
 When self-hosting CardGen:
 
-- Never commit `.env.local` or expose your `SUPABASE_SERVICE_ROLE_KEY`
-- Keep Supabase RLS policies enabled
+- Never commit `.env.local`
+- Keep the CVPAP API and MinIO behind HTTPS; presigned URLs expire after an hour
 - Use HTTPS in production
 - Regularly update dependencies

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTranslation } from "./I18nProvider";
+import { NAV_ITEMS } from "./NavLinks";
 
 interface MobileMenuProps {
     isLoggedIn: boolean;
@@ -57,27 +58,16 @@ export default function MobileMenu({ isLoggedIn }: MobileMenuProps) {
 
             {open && (
                 <div className="absolute left-0 top-full mt-1 w-48 rounded-xl border border-zinc-200 bg-white py-2 shadow-lg">
-                    <Link
-                        href="/"
-                        onClick={() => setOpen(false)}
-                        className="block px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                    >
-                        {t.nav_dashboard}
-                    </Link>
-                    <Link
-                        href="/companies"
-                        onClick={() => setOpen(false)}
-                        className="block px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                    >
-                        {t.nav_companies}
-                    </Link>
-                    <Link
-                        href="/templates"
-                        onClick={() => setOpen(false)}
-                        className="block px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                    >
-                        {t.nav_templates}
-                    </Link>
+                    {NAV_ITEMS.map((item) => (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setOpen(false)}
+                            className="block px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                        >
+                            {t[item.key]}
+                        </Link>
+                    ))}
                 </div>
             )}
         </div>

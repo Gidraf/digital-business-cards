@@ -1,52 +1,20 @@
-import { createClient } from "@/lib/supabase/server";
-import { TABLES, STORAGE } from "@/lib/supabase/constants";
-import { resolveImageUrl } from "@/lib/sample-utils";
 import { notFound } from "next/navigation";
-import GuestCompanyDetail from "@/app/components/GuestCompanyDetail";
+import { serverApi } from "@/lib/api-server";
+import { ApiError } from "@/lib/api";
 import CompanyDetailContent from "@/app/components/CompanyDetailContent";
 
 export default async function CompanyDetailPage(props: PageProps<"/companies/[id]">) {
     const { id } = await props.params;
+    const { api } = await serverApi();
 
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    let company, people;
+    try {
+        ({ company, people } = await api.getCompany(id));
+    } catch (e) {
+        if (e instanceof ApiError && e.status === 404) notFound();
+        throw e;
+    }
+    const templates = await api.listTemplates("business_card", false);
 
-    if (!user) return <GuestCompanyDetail companyId={id} />;
-
-    const { data: company } = await supabase
-        .from(TABLES.COMPANIES)
-        .select("*")
-        .eq("id", id)
-        .single();
-
-    if (!company) notFound();
-
-    const logoUrl = await resolveImageUrl(supabase, STORAGE.LOGOS, company.logo_url, company.is_sample);
-
-    const { data: people } = await supabase
-        .from(TABLES.PEOPLE)
-        .select("*")
-        .eq("company_id", id)
-        .order("created_at", { ascending: true });
-
-    const { data: templates } = await supabase
-        .from(TABLES.TEMPLATES)
-        .select("id, name")
-        .or(`user_id.eq.${user.id},is_sample.eq.true`);
-
-    const peopleWithPhotos = await Promise.all(
-        (people ?? []).map(async (person) => {
-            const photoSignedUrl = await resolveImageUrl(supabase, STORAGE.PHOTOS, person.photo_url, person.is_sample);
-            return { ...person, photoSignedUrl };
-        })
-    );
-
-    return (
-        <CompanyDetailContent
-            company={company}
-            logoUrl={logoUrl}
-            people={peopleWithPhotos}
-            templates={templates ?? []}
-        />
-    );
+    return <CompanyDetailContent company={company} people={people} templates={templates} />;
 }

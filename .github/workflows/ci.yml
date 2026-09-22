@@ -28,5 +28,4 @@ jobs:
       - name: Build
         run: yarn build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key
+          NEXT_PUBLIC_CVPAP_API_URL: http://localhost:5000

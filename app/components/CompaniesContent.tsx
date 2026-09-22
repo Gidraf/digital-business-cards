@@ -4,13 +4,7 @@ import Link from "next/link";
 import { useTranslation } from "./I18nProvider";
 import AddCompanyButton from "./AddCompanyButton";
 
-interface Company {
-    id: string;
-    name: string;
-    domain?: string;
-    is_sample?: boolean;
-    logoUrl?: string | null;
-}
+import type { Company } from "@/lib/types";
 
 export default function CompaniesContent({ companies }: { companies: Company[] }) {
     const { t } = useTranslation();
@@ -41,22 +35,17 @@ export default function CompaniesContent({ companies }: { companies: Company[] }
                             href={`/companies/${company.id}`}
                             className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-5 transition hover:border-zinc-300 hover:shadow-sm"
                         >
-                            {company.logoUrl ? (
+                            {company.logo_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img src={company.logoUrl} alt={company.name} className="h-12 w-12 rounded-lg object-contain" />
+                                <img src={company.logo_url} alt={company.name} className="h-12 w-12 rounded-lg object-contain" />
                             ) : (
                                 <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-100 text-lg font-semibold text-zinc-500">
                                     {company.name[0]}
                                 </div>
                             )}
                             <div className="flex-1">
-                                <div className="flex items-center gap-2">
-                                    <p className="font-semibold text-zinc-900">{company.name}</p>
-                                    {company.is_sample && (
-                                        <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-600">{t.companies_sample}</span>
-                                    )}
-                                </div>
-                                {company.domain && <p className="text-sm text-zinc-500">{company.domain}</p>}
+                                <p className="font-semibold text-zinc-900">{company.name}</p>
+                                <p className="text-sm text-zinc-500">{company.people_count ?? 0} people{company.domain ? ` · ${company.domain}` : ""}</p>
                             </div>
                             <svg className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

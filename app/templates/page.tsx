@@ -1,29 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
-import { TABLES } from "@/lib/supabase/constants";
-import GuestTemplatesPage from "@/app/components/GuestTemplatesPage";
+import { serverApi } from "@/lib/api-server";
 import TemplatesContent from "@/app/components/TemplatesContent";
 
-export default async function TemplatesPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return <GuestTemplatesPage />;
-
-    const { data: userTemplates } = await supabase
-        .from(TABLES.TEMPLATES)
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-    const { data: sampleTemplates } = await supabase
-        .from(TABLES.TEMPLATES)
-        .select("*")
-        .eq("is_sample", true)
-        .order("created_at", { ascending: true });
-
-    return (
-        <TemplatesContent
-            userTemplates={userTemplates ?? []}
-            sampleTemplates={sampleTemplates ?? []}
-        />
-    );
+export default async function TemplatesPage(props: PageProps<"/templates">) {
+    const params = await props.searchParams;
+    const kind = typeof params.kind === "string" ? params.kind : undefined;
+    const { api } = await serverApi();
+    const templates = await api.listTemplates(undefined, true);
+    return <TemplatesContent templates={templates} initialKind={kind} />;
 }

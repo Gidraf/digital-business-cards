@@ -1,44 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import type { CustomFieldDefinition } from "@/lib/types";
+import Link from "next/link";
+import type { CardTemplate, CustomFieldDefinition, Person } from "@/lib/types";
 import { useTranslation } from "./I18nProvider";
 import PersonModal from "./PersonModal";
 import GenerateModal from "./GenerateModal";
 import BulkImportModal from "./BulkImportModal";
 
-interface Person {
-    id: string;
-    first_name: string;
-    last_name: string;
-    academic_prefix: string;
-    academic_suffix: string;
-    address: string;
-    title: string;
-    email: string;
-    phone: string;
-    photo_url: string | null;
-    photoSignedUrl: string | null;
-    template_id: string | null;
-}
-
-interface Template {
-    id: string;
-    name: string;
-}
-
 interface PeopleListProps {
     people: Person[];
     companyId: string;
-    templates: Template[];
-    isSample?: boolean;
+    templates: CardTemplate[];
     companyName?: string;
     companyLogoUrl?: string | null;
     companyAddress?: string;
     customFieldDefs?: CustomFieldDefinition[];
 }
 
-export default function PeopleList({ people, companyId, templates, isSample, companyName, companyLogoUrl, companyAddress, customFieldDefs }: PeopleListProps) {
+export default function PeopleList({ people, companyId, templates, companyName, companyLogoUrl, companyAddress, customFieldDefs }: PeopleListProps) {
     const { t } = useTranslation();
     const [showPersonModal, setShowPersonModal] = useState(false);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -58,22 +38,29 @@ export default function PeopleList({ people, companyId, templates, isSample, com
     function handleClosePersonModal() {
         setShowPersonModal(false);
         setEditPerson(undefined);
-        window.location.reload();
     }
 
     return (
         <div>
             <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-semibold">{t.people_title}</h2>
-                {!isSample && (
-                    <div className="flex items-center gap-3">
+                {(
+                    <div className="flex flex-wrap items-center gap-3">
                         {people.length > 0 && (
-                            <button
-                                onClick={() => setShowGenerateModal(true)}
-                                className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
-                            >
-                                {t.people_generate}
-                            </button>
+                            <>
+                                <Link
+                                    href={`/print/new?company=${companyId}`}
+                                    className="rounded-lg bg-[#FF6B35] px-4 py-2 text-sm font-medium text-white hover:bg-[#e55a2a]"
+                                >
+                                    🖨️ Print
+                                </Link>
+                                <button
+                                    onClick={() => setShowGenerateModal(true)}
+                                    className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700"
+                                >
+                                    {t.people_generate}
+                                </button>
+                            </>
                         )}
                         <button
                             onClick={() => setShowImportModal(true)}
@@ -101,23 +88,23 @@ export default function PeopleList({ people, companyId, templates, isSample, com
                             onClick={() => handleEdit(person)}
                             className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:shadow-md"
                         >
-                            {person.photoSignedUrl ? (
+                            {person.photo_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
-                                    src={person.photoSignedUrl}
+                                    src={person.photo_url}
                                     alt={`${person.first_name} ${person.last_name}`}
                                     className="h-10 w-10 shrink-0 rounded-full object-cover"
                                 />
                             ) : (
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-medium text-zinc-500">
-                                    {person.first_name[0]}{person.last_name[0]}
+                                    {person.first_name?.[0]}{person.last_name?.[0]}
                                 </div>
                             )}
                             <div className="flex-1">
                                 <p className="font-medium text-zinc-900">
                                     {person.first_name} {person.last_name}
                                 </p>
-                                <p className="text-sm text-zinc-500">{person.title}</p>
+                                <p className="text-sm text-zinc-500">{person.title}{person.template_id ? ` · ${templates.find((tp) => tp.id === person.template_id)?.name ?? "template"}` : " · no template"}</p>
                             </div>
                             <span className="text-sm text-zinc-400">{t.people_edit}</span>
                         </button>

@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-09-22
+
+### Changed
+- **Backend moved from Supabase to CVPAP** (Flask + Postgres + MinIO). All data is
+  partner-scoped and shared with the CVPAP dashboard; sign in with a CVPAP account or
+  arrive via the dashboard's *Cards & Print* link (single sign-on).
+- Templates now carry a physical size in mm and an optional **back side**.
+- Text boxes taller than ~2 lines wrap (multi-line messages) in designer, preview and print.
+
+### Added
+- **Card kinds**: flyers, event invitations, harambee (fundraising) cards, birthday,
+  baby-shower and wedding cards — each with its own fields, sizes and starter templates.
+- **Designs**: fill in a kind's fields + images against a template, customize the
+  template inline, save and print.
+- **Print Studio**: N-up imposition on A4/A3/A5/Letter/Legal, portrait/landscape,
+  margins, gap, crop marks, scale; mix designs and quantities on one run; back pages
+  mirrored for duplex. `Print` (browser dialog) and `Save as PDF` (Chromium render in
+  CVPAP, stored in MinIO).
+- Built-in business-card back sides ("If found, please return to…", QR back).
+
+### Removed
+- Supabase auth/storage, Google OAuth and magic links, guest mode, the `/create` quick
+  flow and sample-data seeding (built-in templates are seeded by CVPAP instead).
+
 ## [1.0.0] - 2026-04-18
 
 ### Added

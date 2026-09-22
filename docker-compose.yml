@@ -1,15 +1,15 @@
-version: '3.8'
-
 services:
-  cardgen:
+  cards:
     build:
       context: .
       args:
-        - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        # baked into the client bundle at build time
+        - NEXT_PUBLIC_CVPAP_API_URL=${NEXT_PUBLIC_CVPAP_API_URL:-https://api.ajiriwa.gidraf.dev}
+        - NEXT_PUBLIC_CVPAP_DASHBOARD_URL=${NEXT_PUBLIC_CVPAP_DASHBOARD_URL:-https://ajiriwa.gidraf.dev}
     ports:
-      - "3000:3000"
+      - "7500:7500"
     environment:
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      # server-side calls can use an internal URL (e.g. the CVPAP `web` service on a shared docker network)
+      - CVPAP_API_URL=${CVPAP_API_URL:-}
+      - IMAGE_PROXY_ALLOWED_HOSTS=${IMAGE_PROXY_ALLOWED_HOSTS:-minio.gidraf.dev}
     restart: unless-stopped

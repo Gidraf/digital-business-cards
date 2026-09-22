@@ -1,48 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { TABLES, STORAGE } from "@/lib/supabase/constants";
-import { isGuestMode } from "@/lib/guest-store";
-import { useGuest } from "./GuestProvider";
+import { useRouter } from "next/navigation";
+import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
 import ImageUpload from "./ImageUpload";
 import ConfirmModal from "./ConfirmModal";
 import CardPreviewRenderer from "./designer/CardPreviewRenderer";
-import type { TemplateConfig, SampleCardData, CustomFieldDefinition } from "@/lib/types";
-
-interface Template {
-    id: string;
-    name: string;
-}
+import type { TemplateConfig, CardData, CustomFieldDefinition, CardTemplate, Person } from "@/lib/types";
 
 interface PersonModalProps {
     onClose: () => void;
     companyId: string;
-    templates: Template[];
+    templates: CardTemplate[];
     companyName?: string;
     companyLogoUrl?: string | null;
     customFieldDefs?: CustomFieldDefinition[];
     companyAddress?: string;
-    person?: {
-        id: string;
-        first_name: string;
-        last_name: string;
-        academic_prefix: string;
-        academic_suffix: string;
-        address: string;
-        title: string;
-        email: string;
-        phone: string;
-        photo_url: string | null;
-        photoSignedUrl: string | null;
-        template_id: string | null;
-        custom_fields?: Record<string, string>;
-    };
+    person?: Person;
 }
 
 export default function PersonModal({ onClose, companyId, templates, companyName, companyLogoUrl, companyAddress, customFieldDefs, person }: PersonModalProps) {
-    const guest = useGuest();
+    const router = useRouter();
     const { t } = useTranslation();
     const [firstName, setFirstName] = useState(person?.first_name ?? "");
     const [lastName, setLastName] = useState(person?.last_name ?? "");
@@ -54,58 +33,44 @@ export default function PersonModal({ onClose, companyId, templates, companyName
     const [phone, setPhone] = useState(person?.phone ?? "");
     const [templateId, setTemplateId] = useState(person?.template_id ?? templates[0]?.id ?? "");
     const [photo, setPhoto] = useState<File | null>(null);
-    const [photoPreview, setPhotoPreview] = useState<string | null>(person?.photoSignedUrl ?? null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(person?.photo_url ?? null);
     const [customFields, setCustomFields] = useState<Record<string, string>>(person?.custom_fields ?? {});
     const [error, setError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
     const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
 
-    // Load template config when templateId changes
+    // Load template config when templateId changes (list may be config-less)
     useEffect(() => {
         let cancelled = false;
         async function loadTemplate() {
             if (!templateId) { if (!cancelled) setTemplateConfig(null); return; }
-
-            // Check guest templates first
-            if (isGuestMode()) {
-                const guestTemplate = guest.data.templates.find((t) => t.id === templateId);
-                if (guestTemplate) {
-                    if (!cancelled) setTemplateConfig(guestTemplate.config as TemplateConfig);
-                    return;
-                }
-            }
-
-            const supabase = createClient();
-            const { data } = await supabase
-                .from(TABLES.TEMPLATES)
-                .select("config")
-                .eq("id", templateId)
-                .single();
-            if (!cancelled && data) setTemplateConfig(data.config);
+            const local = templates.find((tp) => tp.id === templateId);
+            if (local?.config?.elements) { setTemplateConfig(local.config); return; }
+            try {
+                const tpl = await clientApi().getTemplate(templateId);
+                if (!cancelled) setTemplateConfig(tpl.config);
+            } catch { if (!cancelled) setTemplateConfig(null); }
         }
         loadTemplate();
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [templateId]);
 
-    // Load signed URLs for asset images in the template
+    // Resolve asset images used by the template
     useEffect(() => {
         let cancelled = false;
         async function loadAssetUrls() {
             if (!templateConfig) return;
-            const assetPaths = templateConfig.elements
+            const ids = templateConfig.elements
                 .filter((el) => el.imageSource?.startsWith("asset:") && !el.imageSource?.startsWith("asset:data:"))
                 .map((el) => el.imageSource!.slice(6));
-            if (assetPaths.length === 0) { if (!cancelled) setAssetUrls({}); return; }
-
-            const supabase = createClient();
-            const urls: Record<string, string> = {};
-            for (const path of assetPaths) {
-                const { data } = await supabase.storage.from(STORAGE.ASSETS).createSignedUrl(path, 3600);
-                if (data?.signedUrl) urls[path] = data.signedUrl;
-            }
-            if (!cancelled) setAssetUrls(urls);
+            if (ids.length === 0) { if (!cancelled) setAssetUrls({}); return; }
+            const urls = await clientApi().resolveAssets(ids);
+            const clean: Record<string, string> = {};
+            for (const [k, v] of Object.entries(urls)) if (v) clean[k] = v;
+            if (!cancelled) setAssetUrls(clean);
         }
         loadAssetUrls();
         return () => { cancelled = true; };
@@ -122,7 +87,7 @@ export default function PersonModal({ onClose, companyId, templates, companyName
 
     const previewFirstName = firstName || "First";
     const previewLastName = lastName || "Last";
-    const previewData: SampleCardData = {
+    const previewData: CardData = {
         first_name: previewFirstName,
         last_name: previewLastName,
         academic_prefix: academicPrefix,
@@ -133,7 +98,7 @@ export default function PersonModal({ onClose, companyId, templates, companyName
         address: address || companyAddress || "",
         title: title || "Job Title",
         email: email || "email@company.com",
-        phone: phone || "+1 555 000 0000",
+        phone: phone || "+254 700 000 000",
         company: companyName || "Company",
         website: "",
         logoUrl: companyLogoUrl ?? null,
@@ -149,54 +114,9 @@ export default function PersonModal({ onClose, companyId, templates, companyName
             setError("Please select a template");
             return;
         }
-
-        if (isGuestMode()) {
-            const row = {
-                company_id: companyId,
-                template_id: templateId,
-                first_name: firstName,
-                last_name: lastName,
-                academic_prefix: academicPrefix,
-                academic_suffix: academicSuffix,
-                address,
-                title,
-                email,
-                phone,
-                photo_url: null as string | null,
-                custom_fields: customFields,
-            };
-            if (person) {
-                guest.updatePerson(person.id, row);
-            } else {
-                guest.addPerson(row);
-            }
-            onClose();
-            return;
-        }
-
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        let photoPath = person?.photo_url ?? null;
-
-        if (photo) {
-            const fileExt = photo.name.split(".").pop();
-            const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from(STORAGE.PHOTOS)
-                .upload(filePath, photo);
-
-            if (uploadError) {
-                setError(uploadError.message);
-                return;
-            }
-            photoPath = filePath;
-        }
-
+        setSaving(true);
+        const api = clientApi();
         const row = {
-            company_id: companyId,
             template_id: templateId,
             first_name: firstName,
             last_name: lastName,
@@ -206,48 +126,35 @@ export default function PersonModal({ onClose, companyId, templates, companyName
             title,
             email,
             phone,
-            photo_url: photoPath,
             custom_fields: customFields,
         };
-
-        if (person) {
-            const { error } = await supabase
-                .from(TABLES.PEOPLE)
-                .update(row)
-                .eq("id", person.id);
-            if (error) { setError(error.message); return; }
-        } else {
-            const { error } = await supabase
-                .from(TABLES.PEOPLE)
-                .insert(row);
-            if (error) { setError(error.message); return; }
+        try {
+            const saved = person
+                ? await api.updatePerson(person.id, row)
+                : await api.createPerson(companyId, row);
+            if (photo) {
+                await api.uploadPhoto(saved.id, photo, photo.name);
+            }
+            onClose();
+            router.refresh();
+        } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Could not save person");
+        } finally {
+            setSaving(false);
         }
-
-        onClose();
     }
 
     async function handleDelete() {
         if (!person) return;
-
-        if (isGuestMode()) {
-            guest.deletePerson(person.id);
-            onClose();
-            return;
-        }
-
-        const supabase = createClient();
-        const { error } = await supabase
-            .from(TABLES.PEOPLE)
-            .delete()
-            .eq("id", person.id);
-
-        if (error) {
-            setError(error.message);
+        try {
+            await clientApi().deletePerson(person.id);
+        } catch (err) {
+            setError(err instanceof ApiError ? err.message : "Could not delete person");
             setShowDeleteConfirm(false);
             return;
         }
-
         onClose();
+        router.refresh();
     }
 
     return (
@@ -401,7 +308,7 @@ export default function PersonModal({ onClose, companyId, templates, companyName
                         <ImageUpload
                             label={t.form_photo}
                             onImageReady={(file) => setPhoto(file)}
-                            currentImageUrl={person?.photoSignedUrl}
+                            currentImageUrl={person?.photo_url}
                             aspectRatio={1}
                             shape="round"
                         />
@@ -430,10 +337,10 @@ export default function PersonModal({ onClose, companyId, templates, companyName
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={templates.length === 0}
+                                    disabled={templates.length === 0 || saving}
                                     className="rounded-lg bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
                                 >
-                                    {person ? t.modal_save : t.people_add}
+                                    {saving ? "Saving…" : person ? t.modal_save : t.people_add}
                                 </button>
                             </div>
                         </div>

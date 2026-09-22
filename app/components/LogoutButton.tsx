@@ -1,14 +1,12 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "./I18nProvider";
 
 export default function LogoutButton() {
     const { t } = useTranslation();
 
     async function handleLogout() {
-        const supabase = createClient();
-        await supabase.auth.signOut();
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
         window.location.href = "/login";
     }
 

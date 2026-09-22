@@ -7,57 +7,26 @@ import DeleteCompanyButton from "./DeleteCompanyButton";
 import EditCompanyButton from "./EditCompanyButton";
 import CustomFieldsManager from "./CustomFieldsManager";
 import CompanyAssets from "./CompanyAssets";
-import type { CustomFieldDefinition } from "@/lib/types";
 
-interface Person {
-    id: string;
-    first_name: string;
-    last_name: string;
-    academic_prefix: string;
-    academic_suffix: string;
-    address: string;
-    title: string;
-    email: string;
-    phone: string;
-    photo_url: string | null;
-    photoSignedUrl: string | null;
-    template_id: string | null;
-    custom_fields?: Record<string, string>;
-}
-
-interface Template {
-    id: string;
-    name: string;
-}
+import type { CardTemplate, Company, Person } from "@/lib/types";
 
 interface CompanyDetailContentProps {
-    company: {
-        id: string;
-        name: string;
-        domain?: string;
-        website?: string;
-        address?: string;
-        is_sample?: boolean;
-        custom_field_definitions?: CustomFieldDefinition[];
-    };
-    logoUrl: string | null;
+    company: Company;
     people: Person[];
-    templates: Template[];
+    templates: CardTemplate[];
 }
 
-export default function CompanyDetailContent({ company, logoUrl, people, templates }: CompanyDetailContentProps) {
+export default function CompanyDetailContent({ company, people, templates }: CompanyDetailContentProps) {
+    const logoUrl = company.logo_url;
     const { t } = useTranslation();
 
     return (
-        <div className="mx-auto w-full max-w-3xl px-6 py-10">
+        <div className="mx-auto w-full max-w-4xl px-6 py-10">
             {/* Breadcrumb */}
             <div className="mb-6 flex items-center gap-2 text-sm text-zinc-500">
                 <Link href="/companies" className="hover:text-zinc-800">{t.companies_title}</Link>
                 <span>/</span>
                 <span className="text-zinc-900">{company.name}</span>
-                {company.is_sample && (
-                    <span className="ml-1 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-600">{t.companies_sample}</span>
-                )}
             </div>
 
             {/* Company header */}
@@ -86,42 +55,32 @@ export default function CompanyDetailContent({ company, logoUrl, people, templat
                         </div>
                     </div>
                 </div>
-                {!company.is_sample && (
-                    <div className="flex items-center gap-2">
-                        <EditCompanyButton
-                            id={company.id}
-                            name={company.name}
-                            domain={company.domain ?? ""}
-                            website={company.website ?? ""}
-                            address={company.address ?? ""}
-                            logoUrl={logoUrl}
-                        />
-                        <DeleteCompanyButton companyId={company.id} companyName={company.name} />
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    <Link href={`/print/new?company=${company.id}`} className="rounded-lg bg-[#FF6B35] px-3 py-2 text-sm font-medium text-white hover:bg-[#e55a2a]">
+                        🖨️ Print cards
+                    </Link>
+                    <EditCompanyButton
+                        id={company.id}
+                        name={company.name}
+                        domain={company.domain ?? ""}
+                        website={company.website ?? ""}
+                        address={company.address ?? ""}
+                        logoUrl={logoUrl}
+                    />
+                    <DeleteCompanyButton companyId={company.id} companyName={company.name} />
+                </div>
             </div>
 
-            {company.is_sample && (
-                <div className="mb-6 rounded-lg bg-sky-50 px-4 py-3 text-sm text-sky-700">
-                    This is a sample company with demo data. You can browse it to see how things work.
-                </div>
-            )}
-
-            {!company.is_sample && (
-                <>
-                    <CompanyAssets companyId={company.id} />
-                    <CustomFieldsManager
-                        companyId={company.id}
-                        initialDefs={company.custom_field_definitions ?? []}
-                    />
-                </>
-            )}
+            <CompanyAssets companyId={company.id} />
+            <CustomFieldsManager
+                companyId={company.id}
+                initialDefs={company.custom_field_definitions ?? []}
+            />
 
             <PeopleList
                 people={people}
                 companyId={company.id}
                 templates={templates}
-                isSample={company.is_sample}
                 companyName={company.name}
                 companyLogoUrl={logoUrl}
                 companyAddress={company.address ?? ""}

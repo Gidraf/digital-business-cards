@@ -1,7 +1,7 @@
 "use client";
 
-import type { CardElement, BoundField, LinkBoundField, CustomFieldDefinition } from "@/lib/types";
-import { BUILT_IN_FIELD_LABELS } from "@/lib/types";
+import type { CardElement, BoundField, LinkBoundField, CustomFieldDefinition, CardKind } from "@/lib/types";
+import { getKind } from "@/lib/card-kinds";
 import { DESIGNER_FONTS } from "@/lib/fonts";
 import { useTranslation } from "@/app/components/I18nProvider";
 import AssetPicker from "./AssetPicker";
@@ -9,8 +9,10 @@ import AssetPicker from "./AssetPicker";
 interface PropertiesPanelProps {
     element: CardElement;
     cardWidth: number;
-    companyId?: string;
+    kind?: CardKind;
+    companyId?: string | null;
     customFieldDefs?: CustomFieldDefinition[];
+    onAssetUrl?: (id: string, url: string) => void;
     cardHeight: number;
     onUpdate: (updates: Partial<CardElement>) => void;
     onDelete: () => void;
@@ -23,8 +25,10 @@ export default function PropertiesPanel({
     element,
     cardWidth,
     cardHeight,
+    kind = "business_card",
     companyId,
     customFieldDefs,
+    onAssetUrl,
     onUpdate,
     onDelete,
     onDuplicate,
@@ -32,6 +36,13 @@ export default function PropertiesPanel({
     onMoveDown,
 }: PropertiesPanelProps) {
     const { t } = useTranslation();
+    const kindDef = getKind(kind);
+    const groups = new Map<string, { key: string; label: string }[]>();
+    for (const f of kindDef.fields) {
+        const g = f.group ?? "Fields";
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g)!.push(f);
+    }
     return (
         <div className="flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: "70vh" }}>
             <div className="flex items-center justify-between">
@@ -133,8 +144,13 @@ export default function PropertiesPanel({
                             onChange={(e) => onUpdate({ boundField: e.target.value as BoundField })}
                             className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
                         >
-                            {Object.entries(BUILT_IN_FIELD_LABELS).map(([key, label]) => (
-                                <option key={key} value={key}>{label}</option>
+                            <option value="custom">Custom Text</option>
+                            {[...groups.entries()].map(([group, fields]) => (
+                                <optgroup key={group} label={group}>
+                                    {fields.map((f) => (
+                                        <option key={f.key} value={f.key}>{f.label}</option>
+                                    ))}
+                                </optgroup>
                             ))}
                             {customFieldDefs && customFieldDefs.length > 0 && (
                                 <optgroup label="Custom Fields">
@@ -247,18 +263,21 @@ export default function PropertiesPanel({
             {/* Image properties */}
             {element.type === "image" && (
                 <Section title="Image">
-                    {companyId ? (
-                        <AssetPicker
-                            companyId={companyId}
-                            currentSource={element.imageSource}
-                            onSelect={(source) => onUpdate({ imageSource: source as CardElement["imageSource"] })}
+                    <AssetPicker
+                        companyId={companyId ?? null}
+                        currentSource={element.imageSource}
+                        imageSlots={kindDef.images}
+                        onAssetUrl={onAssetUrl}
+                        onSelect={(source) => onUpdate({ imageSource: source as CardElement["imageSource"] })}
+                    />
+                    <label className="flex items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={element.hideIfEmpty ?? false}
+                            onChange={(e) => onUpdate({ hideIfEmpty: e.target.checked })}
                         />
-                    ) : (
-                        <div>
-                            <label className="mb-1 block text-xs font-medium text-zinc-500">Source</label>
-                            <p className="text-xs text-zinc-400">Select a company to manage assets</p>
-                        </div>
-                    )}
+                        Hide when no image
+                    </label>
 
                     <div>
                         <label className="mb-1 block text-xs font-medium text-zinc-500">Fit</label>

@@ -1,23 +1,15 @@
 <p align="center">
-  <h1 align="center"><i>Own</i>Cardly</h1>
+  <h1 align="center">Cards &amp; Print</h1>
   <p align="center">
-    <strong>Digital business cards you actually own.</strong>
+    <strong>Design business cards, flyers and event cards — then print them.</strong>
     <br />
-    Open-source. Self-hostable. No vendor lock-in.
-    <br /><br />
-    <a href="https://owncardly.com"><strong>🌐 Live App</strong></a>
-    &nbsp;&nbsp;·&nbsp;&nbsp;
-    <a href="https://owncardly.com/create"><strong>🚀 Create Your Card</strong></a>
-    &nbsp;&nbsp;·&nbsp;&nbsp;
-    <a href="https://github.com/kevinwielander/digital-business-cards/issues">Report Bug</a>
-    &nbsp;&nbsp;·&nbsp;&nbsp;
-    <a href="https://github.com/kevinwielander/digital-business-cards/issues">Request Feature</a>
+    The Cards &amp; Print module of <a href="https://ajiriwa.gidraf.dev">CVPAP</a>. Same login, same partner data, printed on your own printer.
   </p>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" />
-  <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ecf8e?logo=supabase" />
+  <img src="https://img.shields.io/badge/Backend-CVPAP%20(Flask%20%2B%20Postgres%20%2B%20MinIO)-3ecf8e" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-4-38bdf8?logo=tailwindcss" />
   <img src="https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript" />
   <img src="https://img.shields.io/badge/license-MIT-green" />
@@ -25,152 +17,111 @@
 
 ---
 
-## Features
+## What it does
 
-- **Drag & Drop Designer** — Position text, images, shapes, icons, and QR codes on a visual canvas with snap-to-guide alignment
-- **11 Starter Templates** — Portrait and landscape designs, ready to customize
-- **Quick Create Flow** — Pick a template, fill in your info, download — no account needed
-- **Company & Team Management** — Manage multiple companies with people, photos, and custom fields
-- **CSV Bulk Import** — Import entire teams with auto column mapping
-- **Asset Library** — Upload logos, backgrounds, and icons per company
-- **Social Icons** — LinkedIn, X/Twitter, Instagram, GitHub, and more with clickable links
-- **QR Code & vCard** — Auto-generated QR codes and one-click contact download
-- **18 Google Fonts** — Full weight support (Light to Bold)
-- **Layers Panel** — Reorder, group, lock, and hide elements like a proper design tool
-- **Undo/Redo** — Ctrl+Z / Ctrl+Y with full history
-- **10 Languages** — English, German, French, Spanish, Portuguese, Italian, Dutch, Japanese, Chinese, Korean
-- **Guest Mode** — Try everything without signing up (data stored locally)
-- **Mobile Responsive** — Cards scale automatically on mobile devices
-- **Self-Contained Export** — Generated HTML files work offline with embedded images, fonts, and vCards
-- **Google OAuth** — Sign in with Google, data persists in Supabase
+- **Card types** — business cards (from Companies &amp; People), flyers, event invitations, **harambee / fundraising cards** (Paybill · Till · Send Money), birthday, baby shower and wedding cards. Each type has its own data fields; a card is *template + data*.
+- **Drag &amp; drop designer** — text, images, shapes, icons, QR codes, 18 Google fonts, layers, undo/redo. Every template has a physical size in **mm** and an optional **back side** (e.g. *"If found, please return to …"*, bound to live company data).
+- **Print Studio** — pick a paper size (A4, A3, A5, Letter, Legal), portrait/landscape, margins, gap and crop marks; the sheet is imposed N‑up (an A4 takes **10** standard business cards). Mix designs freely on one run — cards 1‑3 one design, 4‑6 another — each row has its own template and quantity. Backs are mirrored for a long‑edge duplex flip.
+- **Print or save** — `Print` opens the browser print dialog at exact size; `Save as PDF` renders the same sheet with Chromium (Playwright) inside CVPAP and stores it in MinIO for download.
+- **Digital export** — self‑contained HTML + vCard per person (QR, save‑contact), as before.
+- **CSV bulk import**, per‑company **custom fields** and an **asset library** (logos, backgrounds, icons) stored in MinIO.
+- **CVPAP authentication** — sign in with your CVPAP partner account, or arrive from the CVPAP dashboard's *Cards &amp; Print* link with single sign‑on. All data is partner‑scoped; super‑admins can act on behalf of a partner.
 
-## Tech Stack
+## Architecture
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | [Next.js 16](https://nextjs.org) (App Router) |
-| Database | [Supabase](https://supabase.com) (PostgreSQL + Auth + Storage) |
-| Styling | [Tailwind CSS 4](https://tailwindcss.com) |
-| Language | TypeScript 5 |
-| Drag & Drop | react-rnd |
-| Animations | Framer Motion |
-| QR Codes | qrcode |
-| Image Cropping | react-easy-crop |
-| CSV Parsing | PapaParse |
-| ZIP Generation | JSZip |
+```
+material-kit-react (CVPAP dashboard) ──"Cards & Print" link──▶ /auth/sso?token=…
+                                                                   │
+                     this app (Next.js 16) ◀── cookies: cvpap_token, cvpap_session
+                       │  server components + client components
+                       ▼
+        CVPAP Flask API  /api/v1/cards/<partner_id>/…   (JWT from /auth/login)
+                       │            │
+                  Postgres        MinIO bucket `cards-assets`
+                (cards_* tables)  (logos, photos, assets, rendered PDFs)
+                       │
+                Playwright/Chromium  ← Print Studio POSTs the sheet HTML → PDF
+```
 
-## Quick Start
+| Layer | Where |
+|-------|-------|
+| API, models, storage, PDF | CVPAP repo: `app/views/cards/`, `app/model/cards.py`, `app/services/cards_store.py`, `app/services/cards_pdf.py`, built‑in templates in `app/services/cards_builtin_templates.py` |
+| Card kinds &amp; fields | `lib/card-kinds.ts` (single source of truth for fields, sizes, sample data) |
+| Imposition / sheet HTML | `lib/print-layout.ts`, `lib/render-html.ts` |
+| API client | `lib/api.ts` (browser), `lib/api-server.ts` (server components) |
+| Auth | `app/api/auth/*`, `app/auth/sso/route.ts`, `proxy.ts` |
+
+## Quick start (development)
 
 ### Prerequisites
 
-- Node.js 18+
-- Yarn
-- A free [Supabase](https://supabase.com) account
+- Node.js 20+ and Yarn
+- A running **CVPAP** backend (Flask) with Postgres and MinIO. In the CVPAP repo:
+  ```bash
+  docker compose up -d --build web
+  ```
+  or locally `python run.py`. On boot CVPAP self‑heals the `cards_*` tables and seeds the built‑in templates.
+- For **Save as PDF**, CVPAP needs Playwright's Chromium (`python -m playwright install chromium` — the production Dockerfile already has it).
 
 ### Setup
 
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/kevinwielander/digital-business-cards.git
-   cd digital-business-cards
-   ```
-
-2. **Install dependencies**
-   ```bash
-   yarn install
-   ```
-
-3. **Set up environment**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Fill in your Supabase URL and anon key from the [Supabase Dashboard](https://supabase.com/dashboard) → Settings → API.
-
-4. **Set up database**
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref YOUR_PROJECT_REF
-   npx supabase db push
-   ```
-
-5. **Configure auth** (optional, for Google sign-in)
-   - Create OAuth credentials in [Google Cloud Console](https://console.cloud.google.com)
-   - Add redirect URI: `https://YOUR_PROJECT_ID.supabase.co/auth/v1/callback`
-   - Enable Google provider in Supabase → Authentication → Providers
-
-6. **Run the dev server**
-   ```bash
-   yarn dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000)
-
-### Seed Sample Data (optional)
-
-To populate with sample companies, people, and template assets:
-
 ```bash
-npx tsx --env-file=.env.local scripts/seed-sample-assets.ts
+git clone <this repo>
+cd digital-business-cards
+yarn install
+cp .env.example .env.local   # point NEXT_PUBLIC_CVPAP_API_URL at your CVPAP API
+yarn dev
 ```
+
+Open http://localhost:7500 and sign in with a CVPAP partner account (the same email/password as the CVPAP dashboard).
+
+### Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_CVPAP_API_URL` | CVPAP API base, e.g. `https://api.ajiriwa.gidraf.dev` |
+| `CVPAP_API_URL` | Optional internal URL for server‑side calls (docker network) |
+| `NEXT_PUBLIC_CVPAP_DASHBOARD_URL` | CVPAP dashboard (forgot‑password link etc.) |
+| `IMAGE_PROXY_ALLOWED_HOSTS` | Extra hosts the `/api/proxy-image` CORS fallback may fetch (presigned MinIO URLs are always allowed) |
+
+On the CVPAP side the storage settings are the usual `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_USE_SSL`, optional `STORAGE_PUBLIC_ENDPOINT`; plus `CARDS_BUCKET` (default `cards-assets`) and `CARDS_PDF_TIMEOUT` (seconds, default 120).
+
+In the CVPAP dashboard (`material-kit-react`) set `NEXT_PUBLIC_CARDS_APP_URL` to where this app is served so the sidebar link can hand the session over.
 
 ## Deployment
 
-### Vercel (Recommended)
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/kevinwielander/digital-business-cards&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY)
-
-### Docker
-
 ```bash
-docker build -t cardgen .
-docker run -p 3000:3000 \
-  -e NEXT_PUBLIC_SUPABASE_URL=your-url \
-  -e NEXT_PUBLIC_SUPABASE_ANON_KEY=your-key \
-  cardgen
+docker compose up -d --build
 ```
 
-### Self-Hosting
+The image bakes `NEXT_PUBLIC_*` values at build time (see `docker-compose.yml`). Put it behind nginx next to the CVPAP API; the app only needs to reach the API (and browsers need to reach MinIO's public endpoint for images and PDF downloads).
 
-See [Self-Hosting Guide](docs/self-hosting.md) for detailed instructions on deploying with Docker, Railway, or Render.
+## Printing tips
 
-## Project Structure
+- In the print dialog choose **Actual size / 100 %**, no scaling, margins **None**. The sheet already carries its own margins and crop marks.
+- For two‑sided cards print the PDF **duplex, flip on long edge** (the back pages are pre‑mirrored). If your printer flips on the short edge, choose *All fronts, then all backs* and feed the sheets manually.
+- A4 fits 2 × 5 standard business cards (89 × 51 mm) in portrait; A6 event cards fit 2 per A4 in landscape, or 4 with a *Borderless* layout on a printer that supports it.
+
+## Project structure
 
 ```
 app/
-  api/          — API routes (card generation, image proxy)
-  auth/         — Auth callback and guest data migration
-  companies/    — Company management pages
-  components/   — All React components
-    designer/   — Card designer (canvas, layers, properties, icons)
-  create/       — Quick card creation flow
-  templates/    — Template management pages
+  api/auth/            login / logout route handlers (CVPAP JWT → cookies)
+  auth/sso/            single sign-on entry from the CVPAP dashboard
+  companies/           companies & people (business-card data)
+  designs/             event / harambee / birthday / baby-shower / wedding / flyer designs
+  templates/           template gallery + designer (front & back, mm sizes)
+  print/               print runs & Print Studio
+  components/          UI (designer/, print/, modals, lists)
 lib/
-  i18n/         — Translation strings (10 languages)
-  supabase/     — Client helpers and constants
-  types.ts      — TypeScript types
-  fonts.ts      — Google Fonts config
-  sample-templates.ts — Starter template definitions
-supabase/
-  migrations/   — Database migrations
+  api.ts, api-server.ts, auth.ts, session-server.ts
+  card-kinds.ts        card types, fields, sizes, sample data
+  card-data.ts         person/design → render data, vCard, QR payload
+  render-html.ts       card face → static HTML
+  print-layout.ts      imposition engine + sheet HTML
+  digital-export.ts    HTML + vCard zip
 ```
-
-## Contributing
-
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Commit your changes
-4. Push to the branch
-5. Open a Pull Request
 
 ## License
 
-[MIT](LICENSE) — free for personal and commercial use.
-
-## Acknowledgments
-
-- [Supabase](https://supabase.com) — Backend and auth
-- [Vercel](https://vercel.com) — Hosting
-- [Tailwind CSS](https://tailwindcss.com) — Styling
-- [react-rnd](https://github.com/bokuweb/react-rnd) — Drag and resize
-- [Framer Motion](https://www.framer.com/motion/) — Animations
+MIT — originally based on [OwnCardly](https://github.com/kevinwielander/digital-business-cards) by Kevin Wielander.
