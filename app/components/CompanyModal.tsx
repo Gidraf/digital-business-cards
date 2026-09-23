@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
 import ImageUpload from "./ImageUpload";
+import LogoBuilder from "./LogoBuilder";
+import { svgDataUri } from "@/lib/logo-builder";
 
 interface CompanyProps {
     onClose: () => void;
@@ -25,6 +27,8 @@ export function CompanyModal(props: CompanyProps) {
     const [website, setWebsite] = useState(props.website);
     const [address, setAddress] = useState(props.address);
     const [logo, setLogo] = useState<File | null>(null);
+    const [generatedLogo, setGeneratedLogo] = useState<string | null>(null);
+    const [showBuilder, setShowBuilder] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
@@ -130,10 +134,18 @@ export function CompanyModal(props: CompanyProps) {
 
                     <ImageUpload
                         label={t.form_logo}
-                        onImageReady={(file) => setLogo(file)}
-                        currentImageUrl={props.currentLogoUrl}
+                        onImageReady={(file) => { setLogo(file); setGeneratedLogo(null); }}
+                        currentImageUrl={generatedLogo ?? props.currentLogoUrl}
                         allowSkipCrop
                     />
+
+                    <button
+                        type="button"
+                        onClick={() => setShowBuilder(true)}
+                        className="w-full rounded-lg border border-dashed border-[#FF6B35]/50 bg-[#FF6B35]/5 px-4 py-2.5 text-sm font-medium text-[#FF6B35] hover:bg-[#FF6B35]/10"
+                    >
+                        ✨ No logo? Generate one from the name
+                    </button>
 
                     {error && <p className="text-sm text-red-500">{error}</p>}
 
@@ -155,6 +167,18 @@ export function CompanyModal(props: CompanyProps) {
                     </div>
                 </form>
             </div>
+
+            {showBuilder && (
+                <LogoBuilder
+                    defaultName={name}
+                    onPick={(file, svg) => {
+                        setLogo(file);
+                        setGeneratedLogo(svgDataUri(svg));
+                        setShowBuilder(false);
+                    }}
+                    onClose={() => setShowBuilder(false)}
+                />
+            )}
         </div>
     );
 }

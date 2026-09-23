@@ -9,6 +9,8 @@ import type { CardData, CardKind, CardTemplate, Design, TemplateConfig } from "@
 import CardPreviewRenderer from "./designer/CardPreviewRenderer";
 import TemplateDesigner from "./TemplateDesigner";
 import ImageUpload from "./ImageUpload";
+import LogoBuilder from "./LogoBuilder";
+import { svgDataUri } from "@/lib/logo-builder";
 import { useToast } from "./ToastProvider";
 
 interface DesignEditorProps {
@@ -43,6 +45,7 @@ export default function DesignEditor({ kind, templates, design, initialTemplateI
     const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
     const [localTemplates, setLocalTemplates] = useState<CardTemplate[]>(templates);
     const [showAllTemplates, setShowAllTemplates] = useState(false);
+    const [builderSlot, setBuilderSlot] = useState<null | "logo" | "photo">(null);
 
     const template = localTemplates.find((t) => t.id === templateId) ?? null;
 
@@ -275,9 +278,14 @@ export default function DesignEditor({ kind, templates, design, initialTemplateI
                                                 currentImageUrl={imagePreviews[img.key] ?? null}
                                                 allowSkipCrop
                                             />
-                                            {imagePreviews[img.key] && (
-                                                <button onClick={() => handleRemoveImage(img.key)} className="mt-1 text-xs text-red-500 hover:underline">Remove</button>
-                                            )}
+                                            <div className="mt-1 flex items-center gap-3">
+                                                <button type="button" onClick={() => setBuilderSlot(img.key)} className="text-xs font-medium text-[#FF6B35] hover:underline">
+                                                    ✨ Generate {img.key === "logo" ? "a logo" : "artwork"}
+                                                </button>
+                                                {imagePreviews[img.key] && (
+                                                    <button onClick={() => handleRemoveImage(img.key)} className="text-xs text-red-500 hover:underline">Remove</button>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -345,6 +353,19 @@ export default function DesignEditor({ kind, templates, design, initialTemplateI
                     )}
                 </div>
             </div>
+            {builderSlot && (
+                <LogoBuilder
+                    defaultName={name || (typeof data[kd.fields[0].key] === "string" ? data[kd.fields[0].key] : "")}
+                    mode={builderSlot === "logo" ? "logo" : "ornament"}
+                    title={builderSlot === "logo" ? "✨ Smart logo builder" : "✨ Artwork builder"}
+                    onPick={(file, svg) => {
+                        setImageFiles((p) => ({ ...p, [builderSlot]: file }));
+                        setImagePreviews((p) => ({ ...p, [builderSlot]: svgDataUri(svg) }));
+                        setBuilderSlot(null);
+                    }}
+                    onClose={() => setBuilderSlot(null)}
+                />
+            )}
         </div>
     );
 }

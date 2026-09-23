@@ -24,6 +24,7 @@
 - **Print Studio** — pick a paper size (A4, A3, A5, Letter, Legal), portrait/landscape, margins, gap and crop marks; the sheet is imposed N‑up (an A4 takes **10** standard business cards). Mix designs freely on one run — cards 1‑3 one design, 4‑6 another — each row has its own template and quantity. Backs are mirrored for a long‑edge duplex flip.
 - **Print or save** — `Print` opens the browser print dialog at exact size; `Save as PDF` renders the same sheet with Chromium (Playwright) inside CVPAP and stores it in MinIO for download.
 - **Shop pricing &amp; reports** — set what you charge per card type: a base price, a minimum quantity (e.g. business cards KES 3 each, minimum 10 = KES 30) and tiers by *cards per sheet* (flyers 2‑up = 15, 5‑up = 6…). The Print Studio quotes each run live; every `Print` / *Mark as printed* is logged, and **Reports** show cards created and printed per day, sheets used and revenue, by card type.
+- **Smart logo builder** — the customer has no logo? Build one from their name in one click: 12 monogram/icon/wordmark styles, ~34 trade symbols (boda, kinyozi, fundi, duka, tailor, agrovet, church…), any colour, serif option, plus decorative **ornaments** for cards with no photo. Output is **SVG** — under 1 KB, sharp at any size, and the default "line" style is nearly free to print. Available on the company logo, on design image slots, and in the designer's asset library.
 - **Ink saver** — big solid fills are what drain an inkjet. Before printing, the sheet is lightened automatically: dark panels become a pale tint of the same colour, the card background becomes paper white, full-bleed photos fade (or drop), soft shadows go, and thin accent rules stay solid. Text on a now-light panel is darkened so it stays readable. There is a **black-ink-only** option and an estimated coverage readout (typically **~70–80% less ink** on a dark design). Your saved design is never modified — only the print sheet. Several **"ink saver" built-in templates** are designed this way from the start.
 - **Digital export** — self‑contained HTML + vCard per person (QR, save‑contact), as before.
 - **CSV bulk import**, per‑company **custom fields** and an **asset library** (logos, backgrounds, icons) stored in MinIO.
@@ -140,6 +141,7 @@ lib/
   render-html.ts       card face → static HTML
   print-layout.ts      imposition engine + sheet HTML
   ink.ts               ink-saving transform + coverage estimate
+  logo-builder.ts      procedural SVG logos, trade icons and ornaments
   pricing.ts           quote calculation (tiers by cards-per-sheet, minimum quantity)
   digital-export.ts    HTML + vCard zip
 ```

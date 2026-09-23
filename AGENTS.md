@@ -30,6 +30,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
   now-light backdrop is darkened. `buildSheetHtml` applies it via `opts.ink`, so preview,
   browser print and the server PDF always agree. The saved template is never changed; the
   mode + `grayscale` live in the job's `layout`.
+- **Logo builder** (`lib/logo-builder.ts`, `app/components/LogoBuilder.tsx`): deterministic,
+  offline SVG generation — no AI/network. Styles take `{name, tagline, initials, icon, color,
+  ink, serif}`; `fitSize()` shrinks text (and widens the canvas) so nothing clips. Output is
+  uploaded through the normal image endpoints as a `.svg` file, so it flows into company
+  logos, design images and assets unchanged. SVG in an `<img>` can't load webfonts — keep the
+  `LOGO_FONT`/`LOGO_SERIF` stacks, which resolve to the fonts installed in the CVPAP image.
 - Units: template `config` is in px (designer canvas); `width_mm`/`height_mm` is the
   physical size. `MM_PX = 96/25.4` converts for print.
 - Run locally: CVPAP API on :5000 (`python run.py` in ../CVPAP), `yarn dev` here. The

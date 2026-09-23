@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { clientApi } from "@/lib/api";
 import type { Asset } from "@/lib/types";
+import LogoBuilder from "../LogoBuilder";
 
 interface AssetPickerProps {
     /** scope the library to a company (shared assets are always included) */
@@ -20,6 +21,7 @@ export default function AssetPicker({ companyId, currentSource, onSelect, imageS
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [showBuilder, setShowBuilder] = useState(false);
     const loadAssetsRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
     useEffect(() => {
@@ -40,9 +42,7 @@ export default function AssetPicker({ companyId, currentSource, onSelect, imageS
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [companyId]);
 
-    async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    async function addFile(file: File) {
         setUploading(true);
         try {
             const [created] = await clientApi().uploadAssets([file], companyId ?? null);
@@ -57,6 +57,11 @@ export default function AssetPicker({ companyId, currentSource, onSelect, imageS
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
+    }
+
+    async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (file) await addFile(file);
     }
 
     async function handleDelete(asset: Asset) {
@@ -127,6 +132,15 @@ export default function AssetPicker({ companyId, currentSource, onSelect, imageS
                 <p className="text-xs text-zinc-400">No assets uploaded yet</p>
             )}
 
+            {/* Generate */}
+            <button
+                type="button"
+                onClick={() => setShowBuilder(true)}
+                className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-[#FF6B35]/50 bg-[#FF6B35]/5 px-3 py-2 text-xs font-medium text-[#FF6B35] hover:bg-[#FF6B35]/10"
+            >
+                ✨ Generate logo / artwork
+            </button>
+
             {/* Upload */}
             <label className="flex cursor-pointer items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs text-zinc-500 transition hover:border-zinc-400 hover:bg-zinc-50">
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -142,6 +156,16 @@ export default function AssetPicker({ companyId, currentSource, onSelect, imageS
                     disabled={uploading}
                 />
             </label>
+
+            {showBuilder && (
+                <LogoBuilder
+                    onPick={async (file) => {
+                        setShowBuilder(false);
+                        await addFile(file);
+                    }}
+                    onClose={() => setShowBuilder(false)}
+                />
+            )}
         </div>
     );
 }

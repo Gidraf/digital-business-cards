@@ -21,6 +21,9 @@ All notable changes to this project will be documented in this file.
   mirrored for duplex. `Print` (browser dialog) and `Save as PDF` (Chromium render in
   CVPAP, stored in MinIO).
 - Built-in business-card back sides ("If found, please return to…", QR back).
+- **Smart logo builder**: generates logos from a business/person name (12 styles, 34 trade
+  icons, colours, serif option) and decorative ornaments for empty photo slots. Pure SVG,
+  generated offline, saved through the normal upload endpoints.
 - **Ink saver** for printing: pale panels instead of solid fills, white card background,
   faded/dropped background photos, no shadows, automatic text darkening for legibility,
   black-ink-only option and an estimated coverage readout. Six ink-light built-in templates
