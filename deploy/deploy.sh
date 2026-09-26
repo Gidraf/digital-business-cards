@@ -85,11 +85,30 @@ wait_http() {
   fail "$name did not come up at $url — check: docker compose logs --tail=80"
 }
 
+# `docker compose up` fails with "port is already allocated" without saying what
+# holds the port — usually a container from an older deployment under a
+# different compose project name. Build+up, and on failure say who to stop.
+compose_up() {
+  local dir=$1 port=$2
+  ( cd "$dir" && docker compose build && docker compose up -d ) && return 0
+
+  echo >&2
+  echo "--- what is holding port $port? ---" >&2
+  docker ps --format '  container {{.Names}}  ->  {{.Ports}}' 2>/dev/null | grep ":$port->" >&2 \
+    || echo "  no container publishes $port" >&2
+  if command -v ss >/dev/null; then
+    ss -ltnp 2>/dev/null | grep ":$port " | sed 's/^/  /' >&2 || true
+  elif command -v lsof >/dev/null; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/  /' >&2 || true
+  fi
+  fail "$(basename "$dir") failed to start. If a container above holds $port and is not part of this deployment, stop it (docker stop <name>) and re-run."
+}
+
 deploy_cvpap() {
   need_dir CVPAP "$CVPAP_DIR"
   pull "$CVPAP_DIR"
   say "building + starting CVPAP"
-  ( cd "$CVPAP_DIR" && docker compose build && docker compose up -d )
+  compose_up "$CVPAP_DIR" 5000
   # 401 means it is serving and demanding auth, which is exactly right here.
   for _ in $(seq 1 60); do
     code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:5000/api/v1/cards/me || true)
@@ -134,7 +153,7 @@ deploy_resume() {
     read -rp "Continue without a backup? [y/N] " ok; [ "$ok" = "y" ] || exit 1
   fi
   say "building + starting Reactive Resume (migrates on boot)"
-  ( cd "$RESUME_DIR" && docker compose build && docker compose up -d )
+  compose_up "$RESUME_DIR" 3000
   wait_http http://127.0.0.1:3000/api/health "Reactive Resume"
 }
 
@@ -142,7 +161,7 @@ deploy_cards() {
   need_dir CARDS "$CARDS_DIR"
   pull "$CARDS_DIR"
   say "building + starting Cards & Print"
-  ( cd "$CARDS_DIR" && docker compose build && docker compose up -d )
+  compose_up "$CARDS_DIR" 7500
   wait_http http://127.0.0.1:7500/cards/login "Cards & Print"
 }
 
