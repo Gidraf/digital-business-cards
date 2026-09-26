@@ -115,8 +115,20 @@ deploy_resume() {
     [ -n "$RESUME_DATABASE_URL" ] && say "using DATABASE_URL from $RESUME_DIR/.env"
   fi
   if [ -n "${RESUME_DATABASE_URL:-}" ]; then
+    # host.docker.internal is a container-only name: it means "the host", so
+    # from the host itself the same database is on the loopback address.
+    # pg_dump runs here, not in a container, so translate it.
+    local dump_url="${RESUME_DATABASE_URL//host.docker.internal/127.0.0.1}"
+    [ "$dump_url" != "$RESUME_DATABASE_URL" ] && say "host.docker.internal -> 127.0.0.1 for the host-side dump"
+
+    command -v pg_dump >/dev/null || fail "pg_dump is not installed: apt install -y postgresql-client"
     say "backing up the resume database -> $dump"
-    pg_dump "$RESUME_DATABASE_URL" > "$dump" || fail "pg_dump failed — refusing to migrate without a backup"
+    if ! pg_dump "$dump_url" > "$dump" 2>"$dump.err"; then
+      echo "--- pg_dump error ---" >&2; cat "$dump.err" >&2
+      rm -f "$dump" "$dump.err"
+      fail "pg_dump failed — refusing to migrate without a backup. Set RESUME_DATABASE_URL to a URL reachable from this host and re-run."
+    fi
+    rm -f "$dump.err"
   else
     echo "WARNING: RESUME_DATABASE_URL unset, skipping backup. The app migrates on boot." >&2
     read -rp "Continue without a backup? [y/N] " ok; [ "$ok" = "y" ] || exit 1
