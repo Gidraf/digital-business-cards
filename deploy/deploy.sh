@@ -75,14 +75,37 @@ pull() {
   git -C "$dir" pull --ff-only
 }
 
-# Wait for a health endpoint instead of assuming `up -d` means "serving".
+# Wait for the app to answer, rather than assuming `up -d` means "serving".
+# Takes a base URL and one or more paths: any 2xx/3xx on any path means up, so
+# a renamed health route does not read as a failed deploy. curl errors are
+# swallowed per attempt and the last status is reported once, instead of
+# printing the same line sixty times.
 wait_http() {
-  local url=$1 name=$2
-  for _ in $(seq 1 60); do
-    if curl -fsS -m 3 -o /dev/null "$url"; then say "$name is up"; return 0; fi
+  local base=$1 name=$2; shift 2
+  local paths=("$@") code=000 path
+  for _ in $(seq 1 90); do
+    for path in "${paths[@]}"; do
+      # curl's -w already prints 000 on failure; `|| echo 000` would append a
+      # second one and the "nothing listening" check would never match.
+      code=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "$base$path" 2>/dev/null) || code=000
+      [ -n "$code" ] || code=000
+      case "$code" in
+        2*|3*) say "$name is up ($path -> HTTP $code)"; return 0 ;;
+      esac
+    done
     sleep 2
   done
-  fail "$name did not come up at $url — check: docker compose logs --tail=80"
+  echo >&2
+  if [ "$code" = "000" ]; then
+    echo "  nothing is listening on $base" >&2
+  else
+    echo "  $base is answering but every path returned HTTP $code:" >&2
+    for path in "${paths[@]}"; do
+      local c; c=$(curl -s -o /dev/null -m 3 -w '%{http_code}' "$base$path" 2>/dev/null) || c=000
+      echo "    $path -> ${c:-000}" >&2
+    done
+  fi
+  fail "$name never became healthy. Check its logs: docker compose logs --tail=80"
 }
 
 # `docker compose up` fails with "port is already allocated" without saying what
@@ -154,7 +177,7 @@ deploy_resume() {
   fi
   say "building + starting Reactive Resume (migrates on boot)"
   compose_up "$RESUME_DIR" 3000
-  wait_http http://127.0.0.1:3000/api/health "Reactive Resume"
+  wait_http http://127.0.0.1:3000 "Reactive Resume" /api/health /auth/login /
 }
 
 deploy_cards() {
@@ -162,7 +185,7 @@ deploy_cards() {
   pull "$CARDS_DIR"
   say "building + starting Cards & Print"
   compose_up "$CARDS_DIR" 7500
-  wait_http http://127.0.0.1:7500/cards/login "Cards & Print"
+  wait_http http://127.0.0.1:7500 "Cards & Print" /cards/login /cards /
 }
 
 reload_nginx() {
