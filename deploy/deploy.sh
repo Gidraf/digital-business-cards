@@ -7,6 +7,11 @@
 #   ./deploy.sh --no-pull    # rebuild what is already checked out
 #   ./deploy.sh bootstrap    # ONE TIME on a new server: install nginx site + TLS
 #
+# Checkouts are found under STACK_ROOT (default /root/ajiriwa, falling back to
+# ~/Projects) by matching each repo's origin remote, so folder naming does not
+# matter. Override with CVPAP_DIR / RESUME_DIR / CARDS_DIR. Runs without sudo
+# when already root.
+#
 # Order is not arbitrary:
 #   1. cvpap   — identity/data authority. Both other apps call /api/v1/cards/me,
 #                so shipping a consumer first is how you get a 500 on a page
@@ -17,10 +22,33 @@
 #                changed API URL needs a rebuild, not a restart.
 set -euo pipefail
 
-CVPAP_DIR="${CVPAP_DIR:-$HOME/Projects/CVPAP}"
-RESUME_DIR="${RESUME_DIR:-$HOME/Projects/Reactive-Resume}"
-CARDS_DIR="${CARDS_DIR:-$HOME/Projects/digital-business-cards}"
-BACKUP_DIR="${BACKUP_DIR:-$HOME/deploy-backups}"
+# Where the three checkouts live on this machine. Folder names vary between the
+# server and a laptop, so each repo is located by its origin remote rather than
+# by a guessed directory name; set the *_DIR variables to override.
+STACK_ROOT="${STACK_ROOT:-/root/ajiriwa}"
+[ -d "$STACK_ROOT" ] || STACK_ROOT="$HOME/Projects"
+BACKUP_DIR="${BACKUP_DIR:-$STACK_ROOT/deploy-backups}"
+
+# Run without $SUDO when already root — minimal server images often lack it.
+SUDO=sudo
+[ "$(id -u)" -eq 0 ] && SUDO=""
+command -v $SUDO >/dev/null || SUDO=""
+
+find_repo() {
+  local want=$1 d url
+  for d in "$STACK_ROOT"/*/; do
+    [ -e "$d/.git" ] || continue
+    url=$(git -C "$d" remote get-url origin 2>/dev/null) || continue
+    case "$(printf '%s' "$url" | tr 'A-Z' 'a-z')" in
+      *"$(printf '%s' "$want" | tr 'A-Z' 'a-z')"*) printf '%s' "${d%/}"; return 0 ;;
+    esac
+  done
+  return 1
+}
+
+CVPAP_DIR="${CVPAP_DIR:-$(find_repo CVPAP || true)}"
+RESUME_DIR="${RESUME_DIR:-$(find_repo Reactive-Resume || true)}"
+CARDS_DIR="${CARDS_DIR:-$(find_repo digital-business-cards || true)}"
 
 PULL=1; TARGETS=()
 for a in "$@"; do
@@ -34,6 +62,10 @@ done
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m!!  %s\033[0m\n' "$*" >&2; exit 1; }
+
+need_dir() {
+  [ -n "$2" ] && [ -d "$2" ] || fail "could not find the $1 checkout under $STACK_ROOT — set ${1}_DIR=/path/to/repo"
+}
 
 pull() {
   [ "$PULL" -eq 1 ] || return 0
@@ -54,6 +86,7 @@ wait_http() {
 }
 
 deploy_cvpap() {
+  need_dir CVPAP "$CVPAP_DIR"
   pull "$CVPAP_DIR"
   say "building + starting CVPAP"
   ( cd "$CVPAP_DIR" && docker compose build && docker compose up -d )
@@ -70,6 +103,7 @@ deploy_cvpap() {
 }
 
 deploy_resume() {
+  need_dir RESUME "$RESUME_DIR"
   pull "$RESUME_DIR"
   # Migrations run on boot and cannot be undone. Take the dump first.
   mkdir -p "$BACKUP_DIR"
@@ -93,6 +127,7 @@ deploy_resume() {
 }
 
 deploy_cards() {
+  need_dir CARDS "$CARDS_DIR"
   pull "$CARDS_DIR"
   say "building + starting Cards & Print"
   ( cd "$CARDS_DIR" && docker compose build && docker compose up -d )
@@ -101,14 +136,15 @@ deploy_cards() {
 
 reload_nginx() {
   say "validating nginx"
-  sudo nginx -t || fail "nginx config is invalid — not reloading"
-  sudo systemctl reload nginx
+  $SUDO nginx -t || fail "nginx config is invalid — not reloading"
+  $SUDO systemctl reload nginx
   say "nginx reloaded"
 }
 
 # One-time server setup: install the nginx site and obtain TLS.
 # Safe to re-run — every step checks for what it already did.
 bootstrap_nginx() {
+  need_dir CARDS "$CARDS_DIR"
   local conf="$CARDS_DIR/deploy/nginx/cards.gidraf.dev.conf"
   local name=cards.gidraf.dev.conf
   local site="/etc/nginx/sites-available/$name"
@@ -118,31 +154,31 @@ bootstrap_nginx() {
   # An extensionless copy from an earlier setup would be loaded as well, giving
   # nginx duplicate server blocks and a duplicate $connection_upgrade map.
   local legacy=/etc/nginx/sites-available/cards.gidraf.dev
-  if sudo test -e "$legacy"; then
+  if $SUDO test -e "$legacy"; then
     fail "a second copy exists at $legacy — remove it and its sites-enabled symlink, or nginx will load this site twice"
   fi
 
   # certbot appends the 443 block and the http->https redirect to this file, so
   # overwriting it drops TLS. Keep a copy, and note whether TLS was configured.
   local had_tls=0
-  if sudo test -f "$site"; then
+  if $SUDO test -f "$site"; then
     local backup="$site.bak-$(date +%Y%m%d-%H%M%S)"
-    sudo cp "$site" "$backup"
+    $SUDO cp "$site" "$backup"
     say "backed up the existing site -> $backup"
-    if sudo grep -qE 'listen[[:space:]]+443|ssl_certificate' "$site"; then had_tls=1; fi
+    if $SUDO grep -qE 'listen[[:space:]]+443|ssl_certificate' "$site"; then had_tls=1; fi
   fi
 
   say "installing the nginx site"
-  sudo cp "$conf" "$site"
-  [ -L "$link" ] || sudo ln -s "$site" "$link"
-  sudo mkdir -p /var/www/html/.well-known/acme-challenge
+  $SUDO cp "$conf" "$site"
+  [ -L "$link" ] || $SUDO ln -s "$site" "$link"
+  $SUDO mkdir -p /var/www/html/.well-known/acme-challenge
 
   if [ "$(grep -rl 'map \$http_upgrade \$connection_upgrade' /etc/nginx/sites-enabled/ 2>/dev/null | wc -l)" -gt 1 ]; then
     fail "another enabled site already defines the \$connection_upgrade map — delete the map block at the end of $site (nginx refuses duplicate map names)"
   fi
 
-  sudo nginx -t || fail "nginx config is invalid — restore the backup above, or fix $site"
-  sudo systemctl reload nginx
+  $SUDO nginx -t || fail "nginx config is invalid — restore the backup above, or fix $site"
+  $SUDO systemctl reload nginx
   say "nginx site is live over HTTP"
 
   # The freshly copied file is HTTP-only. Re-run certbot when TLS was already
@@ -150,17 +186,17 @@ bootstrap_nginx() {
   # when there is no certificate yet.
   if [ "$had_tls" -eq 1 ]; then
     say "the previous config had TLS — reinstalling it onto the new file"
-    sudo certbot --nginx -d cards.gidraf.dev --reinstall
-  elif sudo test -d /etc/letsencrypt/live/cards.gidraf.dev; then
+    $SUDO certbot --nginx -d cards.gidraf.dev --reinstall
+  elif $SUDO test -d /etc/letsencrypt/live/cards.gidraf.dev; then
     say "certificate exists but the site is HTTP-only — installing it"
-    sudo certbot --nginx -d cards.gidraf.dev --reinstall
+    $SUDO certbot --nginx -d cards.gidraf.dev --reinstall
   else
     command -v certbot >/dev/null || fail "certbot is not installed: sudo apt install -y certbot python3-certbot-nginx"
     say "requesting a certificate (certbot adds the 443 block and the redirect)"
-    sudo certbot --nginx -d cards.gidraf.dev
+    $SUDO certbot --nginx -d cards.gidraf.dev
   fi
 
-  sudo nginx -t && sudo systemctl reload nginx
+  $SUDO nginx -t && $SUDO systemctl reload nginx
   say "bootstrap complete — https://cards.gidraf.dev"
 }
 
