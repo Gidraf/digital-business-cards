@@ -222,15 +222,24 @@ offline copy."
     printf '%s\r\n' "$body"
   } > "$mail_file"
 
-  if curl -s --ssl-reqd --url "smtps://smtp.gmail.com:465" \
+  # Keep curl's error: "authentication failed" and "connection refused" need
+  # very different fixes, and -s alone would hide both.
+  local smtp_err="$DEST/smtp.err"
+  if curl -s --show-error --ssl-reqd --url "smtps://smtp.gmail.com:465" \
        --user "$smtp_user:$smtp_pass" \
        --mail-from "$smtp_user" --mail-rcpt "$BACKUP_EMAIL" \
-       --upload-file "$mail_file"; then
+       --upload-file "$mail_file" 2>"$smtp_err"; then
     say "receipt emailed to $BACKUP_EMAIL"
+    rm -f "$mail_file" "$smtp_err"
   else
-    warn "could not send the receipt; it is at $mail_file"
+    warn "could not send the receipt: $(tr '\n' ' ' < "$smtp_err")"
+    # Gmail rejects a normal account password once 2FA is on; it needs an
+    # app password. Keep the receipt somewhere the run does not delete.
+    local kept="${WORK_DIR}/last-failed-receipt.eml"
+    mv -f "$mail_file" "$kept" 2>/dev/null && warn "receipt kept at $kept"
+    rm -f "$smtp_err"
+    warn "if this says authentication failed, ADMIN_EMAIL_PASSWORD must be a Gmail App Password (https://myaccount.google.com/apppasswords), not the account password"
   fi
-  rm -f "$mail_file"
 }
 
 # ── Reclaim ClickHouse space (only after a verified upload) ──────────────────
