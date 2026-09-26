@@ -175,11 +175,33 @@ upload() {
 # ── Email receipt ────────────────────────────────────────────────────────────
 send_receipt() {
   local uploaded=$1
-  local smtp_user="${ADMIN_EMAIL:-}" smtp_pass="${ADMIN_EMAIL_PASSWORD:-}"
-  if [ -z "$smtp_user" ] && [ -f "$STACK_ROOT/CVPAP/.env" ]; then
-    smtp_user=$(grep -E '^[[:space:]]*(export[[:space:]]+)?ADMIN_EMAIL=' "$STACK_ROOT/CVPAP/.env" | tail -1 | sed -E 's/.*ADMIN_EMAIL=//; s/^["'"'"']//; s/["'"'"']$//')
-    smtp_pass=$(grep -E '^[[:space:]]*(export[[:space:]]+)?ADMIN_EMAIL_PASSWORD=' "$STACK_ROOT/CVPAP/.env" | tail -1 | sed -E 's/.*ADMIN_EMAIL_PASSWORD=//; s/^["'"'"']//; s/["'"'"']$//')
+
+  # Read the mail settings the app already uses rather than assuming a provider:
+  # this deployment runs its own SMTP server, not Gmail. Mirrors how CVPAP
+  # resolves them in app/services/__init__.py.
+  local env_file="$STACK_ROOT/CVPAP/.env"
+  envget() {
+    [ -f "$env_file" ] || return 0
+    grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$env_file" 2>/dev/null \
+      | tail -1 | sed -E "s/^[[:space:]]*(export[[:space:]]+)?$1=//; s/^[\"']//; s/[\"']$//"
+  }
+
+  local smtp_user="${ADMIN_EMAIL:-$(envget ADMIN_EMAIL)}"
+  local smtp_pass="${ADMIN_EMAIL_PASSWORD:-$(envget ADMIN_EMAIL_PASSWORD)}"
+  [ -n "$smtp_user" ] || smtp_user="$(envget MAIL_USERNAME)"
+
+  # Host: MAIL_SERVER, then SMTP_SERVER, then mail.$DOMAIN — CVPAP's own order.
+  local smtp_host="${MAIL_SERVER:-$(envget MAIL_SERVER)}"
+  [ -n "$smtp_host" ] || smtp_host="$(envget SMTP_SERVER)"
+  if [ -z "$smtp_host" ]; then
+    local domain; domain="$(envget DOMAIN)"
+    [ -n "$domain" ] && smtp_host="mail.$domain"
   fi
+
+  local smtp_port="${MAIL_PORT:-$(envget MAIL_PORT)}"
+  [ -n "$smtp_port" ] || smtp_port="$(envget SMTP_PORT)"
+  [ -n "$smtp_port" ] || smtp_port=587
+  local use_ssl; use_ssl="$(envget MAIL_USE_SSL)"
 
   local rows="" line name status size sha
   for line in "${REPORT[@]}"; do
@@ -206,8 +228,8 @@ This is a receipt, not the backup itself — the archives are gigabytes and
 Gmail rejects attachments over 25MB. Copy them from Drive to keep your own
 offline copy."
 
-  if [ -z "$smtp_user" ] || [ -z "$smtp_pass" ]; then
-    warn "no ADMIN_EMAIL/ADMIN_EMAIL_PASSWORD — printing the receipt instead"
+  if [ -z "$smtp_user" ] || [ -z "$smtp_pass" ] || [ -z "$smtp_host" ]; then
+    warn "mail is not configured (need ADMIN_EMAIL, ADMIN_EMAIL_PASSWORD and MAIL_SERVER in $env_file) — printing the receipt instead"
     printf '%s\n' "$body"
     return
   fi
@@ -222,23 +244,37 @@ offline copy."
     printf '%s\r\n' "$body"
   } > "$mail_file"
 
+  # Port 465 (or MAIL_USE_SSL) means implicit TLS, which is smtps://. Anything
+  # else — 587 in particular — is STARTTLS on smtp://, negotiated by --ssl-reqd.
+  # Getting this backwards fails as a TLS handshake error, not a login error.
+  local url
+  if [ "$(printf '%s' "$use_ssl" | tr 'A-Z' 'a-z')" = "true" ] || [ "$smtp_port" = "465" ]; then
+    url="smtps://$smtp_host:$smtp_port"
+  else
+    url="smtp://$smtp_host:$smtp_port"
+  fi
+
+  local tls_opts=(--ssl-reqd)
+  # A self-hosted server often presents a self-signed certificate.
+  [ "${MAIL_INSECURE_TLS:-$(envget MAIL_INSECURE_TLS)}" = "true" ] && tls_opts+=(--insecure)
+
   # Keep curl's error: "authentication failed" and "connection refused" need
   # very different fixes, and -s alone would hide both.
+  say "sending receipt via $url as $smtp_user"
   local smtp_err="$DEST/smtp.err"
-  if curl -s --show-error --ssl-reqd --url "smtps://smtp.gmail.com:465" \
+  if curl -s --show-error "${tls_opts[@]}" --url "$url" \
        --user "$smtp_user:$smtp_pass" \
        --mail-from "$smtp_user" --mail-rcpt "$BACKUP_EMAIL" \
        --upload-file "$mail_file" 2>"$smtp_err"; then
     say "receipt emailed to $BACKUP_EMAIL"
     rm -f "$mail_file" "$smtp_err"
   else
-    warn "could not send the receipt: $(tr '\n' ' ' < "$smtp_err")"
-    # Gmail rejects a normal account password once 2FA is on; it needs an
-    # app password. Keep the receipt somewhere the run does not delete.
+    warn "could not send the receipt via $url: $(tr '\n' ' ' < "$smtp_err")"
+    # Keep the receipt somewhere this run does not delete.
     local kept="${WORK_DIR}/last-failed-receipt.eml"
     mv -f "$mail_file" "$kept" 2>/dev/null && warn "receipt kept at $kept"
     rm -f "$smtp_err"
-    warn "if this says authentication failed, ADMIN_EMAIL_PASSWORD must be a Gmail App Password (https://myaccount.google.com/apppasswords), not the account password"
+    warn "check MAIL_SERVER/MAIL_PORT/ADMIN_EMAIL/ADMIN_EMAIL_PASSWORD in $env_file; set MAIL_INSECURE_TLS=true if the server uses a self-signed certificate"
   fi
 }
 
