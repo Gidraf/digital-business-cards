@@ -182,6 +182,18 @@ export function createApi(ctx: ApiContext) {
                 body: JSON.stringify(body),
             }),
 
+        /** Suggest a company-matched palette that is guaranteed printable. */
+        aiTheme: (companyName: string, industry?: string) =>
+            request<{
+                palette: { primary: string; accent: string; text: string; background: string; muted: string };
+                source: "brand" | "suggested" | "fallback";
+                adjusted: string[];
+                ink_estimate: number;
+            }>(ctx, s("/ai/theme"), {
+                method: "POST",
+                body: JSON.stringify({ company_name: companyName, industry }),
+            }),
+
         /** Fix grammar and spelling without rewriting what the customer said. */
         aiPolish: (text: string, language: "auto" | "en" | "sw" = "auto") =>
             request<{ text: string; language: string; changed: boolean }>(ctx, s("/ai/polish"), {

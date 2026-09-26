@@ -11,6 +11,7 @@ import { personCardData, designCardData, sampleCardData } from "@/lib/card-data"
 import { useTranslation } from "./I18nProvider";
 import ConfirmModal from "./ConfirmModal";
 import { useToast } from "./ToastProvider";
+import ThemeMatcher from "./ThemeMatcher";
 import LayersPanel from "./designer/LayersPanel";
 import DesignerCanvas from "./designer/DesignerCanvas";
 import PropertiesPanel from "./designer/PropertiesPanel";
@@ -587,6 +588,9 @@ export default function TemplateDesigner({
                         <span className="text-xs text-zinc-400">
                             {sizeMm.width_mm} × {sizeMm.height_mm} mm · {side === "back" ? "back side" : "front side"}
                         </span>
+                        <div className="ml-auto">
+                            <ThemeMatcher config={activeConfig} onApply={(next) => setActive(() => next)} />
+                        </div>
                     </div>
                     <div className="rounded-xl p-8" style={{ backgroundColor: activeConfig.pageBackgroundColor ?? "#f4f4f5" }}>
                         <DesignerCanvas
