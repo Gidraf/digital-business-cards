@@ -146,26 +146,34 @@ reload_nginx() {
 bootstrap_nginx() {
   need_dir CARDS "$CARDS_DIR"
   local conf="$CARDS_DIR/deploy/nginx/cards.gidraf.dev.conf"
-  local name=cards.gidraf.dev.conf
-  local site="/etc/nginx/sites-available/$name"
-  local link="/etc/nginx/sites-enabled/$name"
   [ -f "$conf" ] || fail "missing $conf"
+  local avail=/etc/nginx/sites-available
+  local enabled=/etc/nginx/sites-enabled
+  local site link
 
-  # An extensionless copy from an earlier setup would be loaded as well, giving
-  # nginx duplicate server blocks and a duplicate $connection_upgrade map.
-  local legacy=/etc/nginx/sites-available/cards.gidraf.dev
-  if $SUDO test -e "$legacy"; then
-    fail "a second copy exists at $legacy — remove it and its sites-enabled symlink, or nginx will load this site twice"
+  # Two names are possible: cards.gidraf.dev and cards.gidraf.dev.conf. Rather
+  # than guessing by extension, adopt whichever one nginx is actually serving —
+  # the sites-enabled symlink is the ground truth, and the live file is the one
+  # holding certbot's 443 block.
+  local e_conf=0 e_bare=0
+  $SUDO test -e "$enabled/cards.gidraf.dev.conf" && e_conf=1
+  $SUDO test -e "$enabled/cards.gidraf.dev"      && e_bare=1
+
+  if [ $e_conf -eq 1 ] && [ $e_bare -eq 1 ]; then
+    fail "both cards.gidraf.dev and cards.gidraf.dev.conf are enabled in $enabled — nginx is loading this site twice. Inspect both, keep the one with the 443 block, and remove the other symlink."
+  elif [ $e_bare -eq 1 ]; then
+    site="$avail/cards.gidraf.dev"; link="$enabled/cards.gidraf.dev"
+    say "adopting the live site (no .conf extension): $site"
+  else
+    site="$avail/cards.gidraf.dev.conf"; link="$enabled/cards.gidraf.dev.conf"
   fi
 
-  # certbot appends the 443 block and the http->https redirect to this file, so
-  # overwriting it drops TLS. Keep a copy, and note whether TLS was configured.
-  local had_tls=0
-  if $SUDO test -f "$site"; then
-    local backup="$site.bak-$(date +%Y%m%d-%H%M%S)"
-    $SUDO cp "$site" "$backup"
-    say "backed up the existing site -> $backup"
-    if $SUDO grep -qE 'listen[[:space:]]+443|ssl_certificate' "$site"; then had_tls=1; fi
+  # A copy under the other name is only a problem once it is enabled; say so and
+  # carry on rather than refusing to deploy.
+  local other="$avail/cards.gidraf.dev.conf"
+  [ "$site" = "$other" ] && other="$avail/cards.gidraf.dev"
+  if $SUDO test -e "$other"; then
+    echo "NOTE: an unused copy sits at $other (not enabled, so nginx ignores it). Delete it when convenient." >&2
   fi
 
   say "installing the nginx site"
