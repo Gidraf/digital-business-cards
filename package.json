@@ -1,8 +1,9 @@
 {
   "name": "cvpap-cards",
   "version": "1.0.0",
-  "description": "Cards & Print \u2014 business cards, flyers and event cards for CVPAP partners, laid out on printer sheets and exported to PDF",
+  "description": "Cards & Print — business cards, flyers and event cards for CVPAP partners, laid out on printer sheets and exported to PDF",
   "license": "MIT",
+  "packageManager": "yarn@4.4.0",
   "author": "CVPAP",
   "keywords": [
     "business-card",
