@@ -5,6 +5,7 @@
 #   ./deploy.sh              # all three, in dependency order
 #   ./deploy.sh cvpap        # just one (also: resume, cards, nginx)
 #   ./deploy.sh --no-pull    # rebuild what is already checked out
+#   ./deploy.sh bootstrap    # ONE TIME on a new server: install nginx site + TLS
 #
 # Order is not arbitrary:
 #   1. cvpap   — identity/data authority. Both other apps call /api/v1/cards/me,
@@ -25,7 +26,7 @@ PULL=1; TARGETS=()
 for a in "$@"; do
   case "$a" in
     --no-pull) PULL=0 ;;
-    cvpap|resume|cards|nginx) TARGETS+=("$a") ;;
+    cvpap|resume|cards|nginx|bootstrap) TARGETS+=("$a") ;;
     *) echo "unknown argument: $a" >&2; exit 2 ;;
   esac
 done
@@ -73,6 +74,12 @@ deploy_resume() {
   # Migrations run on boot and cannot be undone. Take the dump first.
   mkdir -p "$BACKUP_DIR"
   local dump="$BACKUP_DIR/resume-$(date +%Y%m%d-%H%M%S).sql"
+  # Fall back to the app's own .env so this works without exporting anything.
+  if [ -z "${RESUME_DATABASE_URL:-}" ] && [ -f "$RESUME_DIR/.env" ]; then
+    RESUME_DATABASE_URL=$(grep -E '^[[:space:]]*(export[[:space:]]+)?DATABASE_URL=' "$RESUME_DIR/.env" \
+      | tail -1 | sed -E 's/^[[:space:]]*(export[[:space:]]+)?DATABASE_URL=//; s/^["'"'"']//; s/["'"'"']$//')
+    [ -n "$RESUME_DATABASE_URL" ] && say "using DATABASE_URL from $RESUME_DIR/.env"
+  fi
   if [ -n "${RESUME_DATABASE_URL:-}" ]; then
     say "backing up the resume database -> $dump"
     pg_dump "$RESUME_DATABASE_URL" > "$dump" || fail "pg_dump failed — refusing to migrate without a backup"
@@ -99,12 +106,49 @@ reload_nginx() {
   say "nginx reloaded"
 }
 
+# One-time server setup: install the nginx site and obtain TLS.
+# Safe to re-run — every step checks for what it already did.
+bootstrap_nginx() {
+  local conf="$CARDS_DIR/deploy/nginx/cards.gidraf.dev.conf"
+  local site=/etc/nginx/sites-available/cards.gidraf.dev
+  local link=/etc/nginx/sites-enabled/cards.gidraf.dev
+  [ -f "$conf" ] || fail "missing $conf"
+
+  say "installing the nginx site"
+  sudo cp "$conf" "$site"
+  [ -L "$link" ] || sudo ln -s "$site" "$link"
+
+  # certbot writes its challenge here; the site serves it from this root.
+  sudo mkdir -p /var/www/html/.well-known/acme-challenge
+
+  # A duplicate `map` block breaks nginx if another site already defines one.
+  if [ "$(grep -rl 'map \$http_upgrade \$connection_upgrade' /etc/nginx/sites-enabled/ 2>/dev/null | wc -l)" -gt 1 ]; then
+    fail "another enabled site already defines the \$connection_upgrade map — delete the map block at the end of $site (nginx refuses duplicate map names)"
+  fi
+
+  sudo nginx -t || fail "nginx config is invalid — fix $site before continuing"
+  sudo systemctl reload nginx
+  say "nginx site is live over HTTP"
+
+  if sudo test -d /etc/letsencrypt/live/cards.gidraf.dev; then
+    say "TLS certificate already present — skipping certbot"
+  else
+    command -v certbot >/dev/null || fail "certbot is not installed: sudo apt install -y certbot python3-certbot-nginx"
+    say "requesting a certificate (certbot will add the 443 block and the http->https redirect)"
+    sudo certbot --nginx -d cards.gidraf.dev
+  fi
+
+  sudo nginx -t && sudo systemctl reload nginx
+  say "bootstrap complete — https://cards.gidraf.dev"
+}
+
 for t in "${TARGETS[@]}"; do
   case "$t" in
     cvpap)  deploy_cvpap  ;;
     resume) deploy_resume ;;
     cards)  deploy_cards  ;;
     nginx)  reload_nginx  ;;
+    bootstrap) bootstrap_nginx ;;
   esac
 done
 
