@@ -29,6 +29,8 @@ export function proxy(request: NextRequest) {
 
 export const config = {
     matcher: [
+        // the app root: the catch-all below does not match an empty path
+        "/",
         "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|csv)$).*)",
     ],
 };

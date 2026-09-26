@@ -11,6 +11,7 @@ import type { CardData, PaperName, PrintItem, PrintLayoutSettings, PrintMaterial
 import { getGoogleFontsUrl, getUsedFonts } from "./fonts";
 import { designCardData, personCardData, qrPayloadFor } from "./card-data";
 import { renderFaceHtml, type RenderImages } from "./render-html";
+import { withBase } from "./base-path";
 import { estimateCoverage, inkSaveConfig, type InkMode } from "./ink";
 
 export const MM_PX = 96 / 25.4; // CSS px per mm
@@ -215,7 +216,7 @@ export async function inlineImageUrl(url: string): Promise<string | null> {
         if (res.ok) return await toDataUri(res);
     } catch { /* fall through to proxy */ }
     try {
-        const res = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`);
+        const res = await fetch(withBase(`/api/proxy-image?url=${encodeURIComponent(url)}`));
         if (res.ok) return await toDataUri(res);
     } catch { /* ignore */ }
     return null;

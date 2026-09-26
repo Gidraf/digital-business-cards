@@ -99,10 +99,37 @@ docker compose up -d --build
 
 The image bakes `NEXT_PUBLIC_*` values at build time (see `docker-compose.yml`) and listens on **7500**. Put it behind nginx next to the CVPAP API; the app only needs to reach the API (and browsers need to reach MinIO's public endpoint for images and PDF downloads).
 
+### One domain, two apps
+
+Cards & Print and Reactive Resume share `cards.gidraf.dev`:
+
+| Path | App | Port |
+|------|-----|------|
+| `/cards/*` | Cards & Print (this repo, Next `basePath: "/cards"`) | 7500 |
+| `/*` | Reactive Resume (CV builder, cover letters, ATS) | 3000 |
+
+**One login, one tenant.** CVPAP is the only login channel. Signing in at `/cards/login`
+sets the shared `cvpap_token` cookie; because both apps are on one origin, the CV side reads
+it at `/api/sso/cvpap`, asks CVPAP who it belongs to, and starts the matching Reactive Resume
+session — no second password, and no shared JWT secret between the services. The CV account
+is keyed to the **CVPAP partner**, so a partner's staff share one library of resumes and can
+never see another partner's, matching the `partner_id` scoping the cards side already uses.
+Signing out ends both sessions.
+
+Reactive Resume keeps the root because it claims many top-level paths
+(`/auth/*`, `/api/auth/*`, `/dashboard`, `/uploads`, `/mcp`, `/.well-known`) and has no
+base-path support — leaving it there means no upstream files are patched, so syncing with
+upstream stays cheap. Signing in lands on `/cards/choose`, where you pick **Create a CV**
+(→ `/dashboard`) or **Design & print cards** (→ `/cards`); the navbar has a CVs link to
+switch back.
+
+`NEXT_PUBLIC_BASE_PATH` must match `basePath` in `next.config.ts`, and is baked in at build
+time. Set it to an empty string to serve the cards app at the root instead.
+
 ### nginx + TLS (cards.gidraf.dev)
 
-`deploy/nginx/cards.gidraf.dev.conf` proxies the site to `127.0.0.1:7500`. It is HTTP-only —
-Certbot adds the 443 block and the redirect:
+`deploy/nginx/cards.gidraf.dev.conf` routes `/cards/*` to 7500 and everything else to 3000.
+It is HTTP-only — Certbot adds the 443 block and the redirect:
 
 ```bash
 sudo cp deploy/nginx/cards.gidraf.dev.conf /etc/nginx/sites-available/cards.gidraf.dev
@@ -132,6 +159,7 @@ app/
   designs/             event / harambee / birthday / baby-shower / wedding / flyer designs
   templates/           template gallery + designer (front & back, mm sizes)
   print/               print runs & Print Studio (live quote, print log)
+  choose/              post-login chooser: CV or cards
   reports/, settings/pricing/   shop reports and pricing rules
   components/          UI (designer/, print/, modals, lists)
 lib/
@@ -143,6 +171,7 @@ lib/
   ink.ts               ink-saving transform + coverage estimate
   logo-builder.ts      procedural SVG logos, trade icons and ornaments
   pricing.ts           quote calculation (tiers by cards-per-sheet, minimum quantity)
+  base-path.ts         sub-path mounting helper (withBase) + resume app links
   digital-export.ts    HTML + vCard zip
 ```
 

@@ -6,6 +6,8 @@ services:
         # baked into the client bundle at build time
         - NEXT_PUBLIC_CVPAP_API_URL=${NEXT_PUBLIC_CVPAP_API_URL:-https://api.ajiriwa.gidraf.dev}
         - NEXT_PUBLIC_CVPAP_DASHBOARD_URL=${NEXT_PUBLIC_CVPAP_DASHBOARD_URL:-https://ajiriwa.gidraf.dev}
+        # sub-path this app is mounted at (Reactive Resume owns the domain root)
+        - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-/cards}
     ports:
       - "7500:7500"
     environment:

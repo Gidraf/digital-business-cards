@@ -6,6 +6,7 @@
  * Every partner-scoped call goes to /api/v1/cards/<partner_id>/…
  */
 import { getClientSession, getClientToken } from "./auth";
+import { withBase } from "./base-path";
 import type {
     Asset, CardKind, CardTemplate, Company, Design, Person, PrintEvent, PrintItem,
     PrintJob, PrintMaterials, Report, TemplateConfig,
@@ -55,7 +56,7 @@ async function request<T>(ctx: ApiContext, path: string, init: RequestInit = {})
         if (res.status === 401 && typeof window !== "undefined") {
             // token expired / invalid — bounce to login, keep the return path
             const next = encodeURIComponent(window.location.pathname + window.location.search);
-            window.location.href = `/login?expired=1&next=${next}`;
+            window.location.href = withBase(`/login?expired=1&next=${next}`);
         }
         throw new ApiError(res.status, err, b.code, b.detail);
     }

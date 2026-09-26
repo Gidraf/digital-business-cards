@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "../components/I18nProvider";
+import { withBase } from "@/lib/base-path";
 
 const CVPAP_DASHBOARD_URL = process.env.NEXT_PUBLIC_CVPAP_DASHBOARD_URL ?? "https://ajiriwa.gidraf.dev";
 
@@ -27,7 +28,7 @@ function LoginForm() {
         setSubmitting(true);
         setError(null);
         try {
-            const res = await fetch("/api/auth/login", {
+            const res = await fetch(withBase("/api/auth/login"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: email.trim(), password }),
@@ -38,7 +39,8 @@ function LoginForm() {
                 return;
             }
             const next = params.get("next");
-            router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
+            // no explicit destination → let them pick CV or cards
+            router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/choose");
             router.refresh();
         } catch {
             setError("Could not reach the server. Please try again.");
@@ -124,7 +126,7 @@ export default function LoginPage() {
                 <div className="relative z-10 flex flex-col justify-between p-12">
                     <div className="flex items-center gap-2.5">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/icon.svg" alt="Cards & Print" className="h-9 w-9" />
+                        <img src={withBase("/icon.svg")} alt="Cards & Print" className="h-9 w-9" />
                         <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 800, fontSize: 22 }}>
                             <span className="italic text-[#FF6B35]">Cards</span>
                             <span className="text-white"> & Print</span>
@@ -167,7 +169,7 @@ export default function LoginPage() {
                 <div className="w-full max-w-[380px]">
                     <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/icon.svg" alt="Cards & Print" className="h-10 w-10" />
+                        <img src={withBase("/icon.svg")} alt="Cards & Print" className="h-10 w-10" />
                         <span style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontWeight: 800, fontSize: 24 }}>
                             <span className="italic text-[#FF6B35]">Cards</span>
                             <span className="text-[#1A1128]"> & Print</span>

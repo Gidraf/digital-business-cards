@@ -38,5 +38,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
   `LOGO_FONT`/`LOGO_SERIF` stacks, which resolve to the fonts installed in the CVPAP image.
 - Units: template `config` is in px (designer canvas); `width_mm`/`height_mm` is the
   physical size. `MM_PX = 96/25.4` converts for print.
+- **Mounted under `/cards`** so it shares one domain with Reactive Resume (which owns the
+  root; see `deploy/nginx/cards.gidraf.dev.conf`). Next applies `basePath` to `<Link>`, the
+  router and route handlers, but NOT to raw `fetch()`, `next/image` `src`, hard
+  `window.location` assignments, or `NextResponse.redirect(new URL(...))` inside a route
+  handler — wrap those in `withBase()` from `lib/base-path.ts`. The proxy (middleware) does
+  re-apply it for `nextUrl.clone()`. Links to the CV side use plain `<a>` with
+  `RESUME_APP.*`, never `<Link>`, which would prefix them.
 - Run locally: CVPAP API on :5000 (`python run.py` in ../CVPAP), `yarn dev` here. The
   `.claude/launch.json` config `cards-web` starts the dev server on :7500.

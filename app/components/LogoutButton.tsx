@@ -1,13 +1,15 @@
 "use client";
 
 import { useTranslation } from "./I18nProvider";
+import { RESUME_APP, withBase } from "@/lib/base-path";
 
 export default function LogoutButton() {
     const { t } = useTranslation();
 
     async function handleLogout() {
-        await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-        window.location.href = "/login";
+        await fetch(withBase("/api/auth/logout"), { method: "POST" }).catch(() => undefined);
+        // also ends the CV-side session, then lands back on the single login page
+        window.location.href = RESUME_APP.logout;
     }
 
     return (

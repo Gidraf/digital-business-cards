@@ -5,6 +5,7 @@ import Papa from "papaparse";
 import { useRouter } from "next/navigation";
 import { clientApi, ApiError } from "@/lib/api";
 import { useTranslation } from "./I18nProvider";
+import { withBase } from "@/lib/base-path";
 import type { CardTemplate, CustomFieldDefinition } from "@/lib/types";
 
 const KNOWN_FIELDS = ["first_name", "last_name", "academic_prefix", "academic_suffix", "title", "email", "phone", "address"] as const;
@@ -288,7 +289,7 @@ export default function BulkImportModal({ onClose, companyId, templates, customF
                             <p className="text-sm font-medium text-zinc-700">{t.import_format}</p>
                             <p className="mt-1 text-xs text-zinc-500">CSV with headers: {t.form_first_name}, {t.form_last_name}, {t.form_job_title}, {t.form_email}, {t.form_phone}</p>
                             <a
-                                href="/sample-import.csv"
+                                href={withBase("/sample-import.csv")}
                                 download
                                 className="mt-2 inline-block text-xs font-medium text-sky-600 hover:underline"
                             >
