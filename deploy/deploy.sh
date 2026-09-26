@@ -111,8 +111,26 @@ wait_http() {
 # `docker compose up` fails with "port is already allocated" without saying what
 # holds the port — usually a container from an older deployment under a
 # different compose project name. Build+up, and on failure say who to stop.
+# Image builds fill the disk fast, and a full /var/lib/docker shows up as
+# baffling runtime failures rather than "no space" — MongoDB, for instance,
+# starts, fails to write its diagnostic file, and calls terminate() in a loop.
+check_disk() {
+  local dir="${1:-/var/lib/docker}" avail_kb avail_gb use
+  [ -d "$dir" ] || dir=/
+  avail_kb=$(df -Pk "$dir" 2>/dev/null | awk 'NR==2{print $4}')
+  use=$(df -Pk "$dir" 2>/dev/null | awk 'NR==2{gsub(/%/,"",$5); print $5}')
+  [ -n "$avail_kb" ] || return 0
+  avail_gb=$((avail_kb / 1024 / 1024))
+  if [ "${use:-0}" -ge 95 ] || [ "$avail_gb" -lt 2 ]; then
+    fail "only ${avail_gb}GB free on $dir (${use}% used) — builds will fail and running containers may crash. Reclaim space with: docker builder prune -af && docker image prune -af  (never pass --volumes, it deletes your databases)"
+  elif [ "${use:-0}" -ge 85 ] || [ "$avail_gb" -lt 5 ]; then
+    echo "WARNING: only ${avail_gb}GB free on $dir (${use}% used). Consider: docker builder prune -af" >&2
+  fi
+}
+
 compose_up() {
   local dir=$1 port=$2 log badport
+  check_disk /var/lib/docker
   log=$(mktemp)
 
   if ( cd "$dir" && docker compose build && docker compose up -d ) 2>&1 | tee "$log"; then
