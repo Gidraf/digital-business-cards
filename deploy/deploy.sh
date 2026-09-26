@@ -110,31 +110,53 @@ reload_nginx() {
 # Safe to re-run — every step checks for what it already did.
 bootstrap_nginx() {
   local conf="$CARDS_DIR/deploy/nginx/cards.gidraf.dev.conf"
-  local site=/etc/nginx/sites-available/cards.gidraf.dev
-  local link=/etc/nginx/sites-enabled/cards.gidraf.dev
+  local name=cards.gidraf.dev.conf
+  local site="/etc/nginx/sites-available/$name"
+  local link="/etc/nginx/sites-enabled/$name"
   [ -f "$conf" ] || fail "missing $conf"
+
+  # An extensionless copy from an earlier setup would be loaded as well, giving
+  # nginx duplicate server blocks and a duplicate $connection_upgrade map.
+  local legacy=/etc/nginx/sites-available/cards.gidraf.dev
+  if sudo test -e "$legacy"; then
+    fail "a second copy exists at $legacy — remove it and its sites-enabled symlink, or nginx will load this site twice"
+  fi
+
+  # certbot appends the 443 block and the http->https redirect to this file, so
+  # overwriting it drops TLS. Keep a copy, and note whether TLS was configured.
+  local had_tls=0
+  if sudo test -f "$site"; then
+    local backup="$site.bak-$(date +%Y%m%d-%H%M%S)"
+    sudo cp "$site" "$backup"
+    say "backed up the existing site -> $backup"
+    if sudo grep -qE 'listen[[:space:]]+443|ssl_certificate' "$site"; then had_tls=1; fi
+  fi
 
   say "installing the nginx site"
   sudo cp "$conf" "$site"
   [ -L "$link" ] || sudo ln -s "$site" "$link"
-
-  # certbot writes its challenge here; the site serves it from this root.
   sudo mkdir -p /var/www/html/.well-known/acme-challenge
 
-  # A duplicate `map` block breaks nginx if another site already defines one.
   if [ "$(grep -rl 'map \$http_upgrade \$connection_upgrade' /etc/nginx/sites-enabled/ 2>/dev/null | wc -l)" -gt 1 ]; then
     fail "another enabled site already defines the \$connection_upgrade map — delete the map block at the end of $site (nginx refuses duplicate map names)"
   fi
 
-  sudo nginx -t || fail "nginx config is invalid — fix $site before continuing"
+  sudo nginx -t || fail "nginx config is invalid — restore the backup above, or fix $site"
   sudo systemctl reload nginx
   say "nginx site is live over HTTP"
 
-  if sudo test -d /etc/letsencrypt/live/cards.gidraf.dev; then
-    say "TLS certificate already present — skipping certbot"
+  # The freshly copied file is HTTP-only. Re-run certbot when TLS was already
+  # set up (it reuses the existing certificate and re-adds the 443 block), or
+  # when there is no certificate yet.
+  if [ "$had_tls" -eq 1 ]; then
+    say "the previous config had TLS — reinstalling it onto the new file"
+    sudo certbot --nginx -d cards.gidraf.dev --reinstall
+  elif sudo test -d /etc/letsencrypt/live/cards.gidraf.dev; then
+    say "certificate exists but the site is HTTP-only — installing it"
+    sudo certbot --nginx -d cards.gidraf.dev --reinstall
   else
     command -v certbot >/dev/null || fail "certbot is not installed: sudo apt install -y certbot python3-certbot-nginx"
-    say "requesting a certificate (certbot will add the 443 block and the http->https redirect)"
+    say "requesting a certificate (certbot adds the 443 block and the redirect)"
     sudo certbot --nginx -d cards.gidraf.dev
   fi
 
