@@ -30,7 +30,7 @@ STACK_ROOT="${STACK_ROOT:-/root/ajiriwa}"
 BACKUP_DIR="${BACKUP_DIR:-$STACK_ROOT/deploy-backups}"
 
 # Run without $SUDO when already root — minimal server images often lack it.
-SUDO=sudo
+SUDO="${SUDO-sudo}"
 [ "$(id -u)" -eq 0 ] && SUDO=""
 command -v $SUDO >/dev/null || SUDO=""
 
@@ -147,8 +147,11 @@ bootstrap_nginx() {
   need_dir CARDS "$CARDS_DIR"
   local conf="$CARDS_DIR/deploy/nginx/cards.gidraf.dev.conf"
   [ -f "$conf" ] || fail "missing $conf"
-  local avail=/etc/nginx/sites-available
-  local enabled=/etc/nginx/sites-enabled
+  # Overridable so the bootstrap can be exercised against a fake tree in tests.
+  local avail="${NGINX_AVAIL:-/etc/nginx/sites-available}"
+  local enabled="${NGINX_ENABLED:-/etc/nginx/sites-enabled}"
+  local le_live="${LETSENCRYPT_LIVE:-/etc/letsencrypt/live}"
+  local acme_root="${ACME_ROOT:-/var/www/html/.well-known/acme-challenge}"
   local site link
 
   # Two names are possible: cards.gidraf.dev and cards.gidraf.dev.conf. Rather
@@ -176,29 +179,45 @@ bootstrap_nginx() {
     echo "NOTE: an unused copy sits at $other (not enabled, so nginx ignores it). Delete it when convenient." >&2
   fi
 
+  # certbot appends the 443 block and the http->https redirect to the installed
+  # file, so copying the repo's HTTP-only version over it drops TLS. Keep a copy
+  # and remember whether TLS was configured, so it can be put back.
+  local had_tls=0 backup=""
+  if $SUDO test -f "$site"; then
+    backup="$site.bak-$(date +%Y%m%d-%H%M%S)"
+    $SUDO cp "$site" "$backup"
+    say "backed up the existing site -> $backup"
+    if $SUDO grep -qE 'listen[[:space:]]+443|ssl_certificate' "$site"; then had_tls=1; fi
+  fi
+
   say "installing the nginx site"
   $SUDO cp "$conf" "$site"
   [ -L "$link" ] || $SUDO ln -s "$site" "$link"
-  $SUDO mkdir -p /var/www/html/.well-known/acme-challenge
+  $SUDO mkdir -p "$acme_root"
 
-  if [ "$(grep -rl 'map \$http_upgrade \$connection_upgrade' /etc/nginx/sites-enabled/ 2>/dev/null | wc -l)" -gt 1 ]; then
+  if [ "$(grep -rl 'map \$http_upgrade \$connection_upgrade' "$enabled"/ 2>/dev/null | wc -l)" -gt 1 ]; then
     fail "another enabled site already defines the \$connection_upgrade map — delete the map block at the end of $site (nginx refuses duplicate map names)"
   fi
 
-  $SUDO nginx -t || fail "nginx config is invalid — restore the backup above, or fix $site"
-  $SUDO systemctl reload nginx
-  say "nginx site is live over HTTP"
+  if ! $SUDO nginx -t; then
+    if [ -n "$backup" ]; then
+      $SUDO cp "$backup" "$site"
+      $SUDO nginx -t >/dev/null 2>&1 && $SUDO systemctl reload nginx
+      fail "the new config did not validate — restored $backup and left nginx on it"
+    fi
+    fail "nginx config is invalid; fix $site"
+  fi
 
-  # The freshly copied file is HTTP-only. Re-run certbot when TLS was already
-  # set up (it reuses the existing certificate and re-adds the 443 block), or
-  # when there is no certificate yet.
-  if [ "$had_tls" -eq 1 ]; then
-    say "the previous config had TLS — reinstalling it onto the new file"
-    $SUDO certbot --nginx -d cards.gidraf.dev --reinstall
-  elif $SUDO test -d /etc/letsencrypt/live/cards.gidraf.dev; then
-    say "certificate exists but the site is HTTP-only — installing it"
+  # The file just copied in is HTTP-only. When TLS was already set up, put it
+  # back BEFORE reloading, so the site is never served without HTTPS. certbot
+  # edits the file and reloads nginx itself.
+  if [ "$had_tls" -eq 1 ] || $SUDO test -d "$le_live/cards.gidraf.dev"; then
+    command -v certbot >/dev/null || fail "certbot is not installed, and $site currently has no TLS: restore $backup or run: sudo apt install -y certbot python3-certbot-nginx"
+    say "restoring TLS onto the new config"
     $SUDO certbot --nginx -d cards.gidraf.dev --reinstall
   else
+    $SUDO systemctl reload nginx
+    say "nginx site is live over HTTP"
     command -v certbot >/dev/null || fail "certbot is not installed: sudo apt install -y certbot python3-certbot-nginx"
     say "requesting a certificate (certbot adds the 443 block and the redirect)"
     $SUDO certbot --nginx -d cards.gidraf.dev
