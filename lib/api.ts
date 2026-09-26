@@ -166,6 +166,28 @@ export function createApi(ctx: ApiContext) {
             }
             return res.blob();
         },
+
+        // ── AI writing help ──────────────────────────────────────────────────
+        /** Draft a long-form field from the details already entered on the card. */
+        aiText: (body: {
+            kind: string;
+            field: string;
+            language?: "en" | "sw" | "both";
+            notes?: string;
+            tone?: string;
+            context?: Record<string, unknown>;
+        }) =>
+            request<{ text: string; language: string }>(ctx, s("/ai/text"), {
+                method: "POST",
+                body: JSON.stringify(body),
+            }),
+
+        /** Fix grammar and spelling without rewriting what the customer said. */
+        aiPolish: (text: string, language: "auto" | "en" | "sw" = "auto") =>
+            request<{ text: string; language: string; changed: boolean }>(ctx, s("/ai/polish"), {
+                method: "POST",
+                body: JSON.stringify({ text, language }),
+            }),
     };
 }
 
