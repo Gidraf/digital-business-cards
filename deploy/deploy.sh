@@ -112,19 +112,39 @@ wait_http() {
 # holds the port — usually a container from an older deployment under a
 # different compose project name. Build+up, and on failure say who to stop.
 compose_up() {
-  local dir=$1 port=$2
-  ( cd "$dir" && docker compose build && docker compose up -d ) && return 0
+  local dir=$1 port=$2 log badport
+  log=$(mktemp)
+
+  if ( cd "$dir" && docker compose build && docker compose up -d ) 2>&1 | tee "$log"; then
+    rm -f "$log"
+    return 0
+  fi
+
+  # Only talk about ports when docker actually complained about one, and use the
+  # port from its message rather than the one we expected — the clash is often
+  # on a dependency (redis) rather than the service's own port.
+  badport=$(sed -nE 's/.*Bind for [0-9a-fA-F.:]*:([0-9]+) failed.*/\1/p' "$log" | head -1)
+  [ -z "$badport" ] && badport=$(sed -nE 's/.*address already in use.*:([0-9]+).*/\1/p' "$log" | head -1)
 
   echo >&2
-  echo "--- what is holding port $port? ---" >&2
-  docker ps --format '  container {{.Names}}  ->  {{.Ports}}' 2>/dev/null | grep ":$port->" >&2 \
-    || echo "  no container publishes $port" >&2
-  if command -v ss >/dev/null; then
-    ss -ltnp 2>/dev/null | grep ":$port " | sed 's/^/  /' >&2 || true
-  elif command -v lsof >/dev/null; then
-    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/  /' >&2 || true
+  if [ -n "$badport" ]; then
+    echo "--- what is holding port $badport? ---" >&2
+    docker ps --format '  container {{.Names}}  ->  {{.Ports}}' 2>/dev/null | grep ":$badport->" >&2 \
+      || echo "  no container publishes $badport" >&2
+    if command -v ss >/dev/null; then
+      ss -ltnp 2>/dev/null | grep ":$badport " | sed 's/^/  /' >&2 || true
+    elif command -v lsof >/dev/null; then
+      lsof -nP -iTCP:"$badport" -sTCP:LISTEN 2>/dev/null | sed 's/^/  /' >&2 || true
+    fi
+    rm -f "$log"
+    fail "$(basename "$dir") could not bind port $badport. Stop whatever holds it (docker stop <name>) and re-run."
   fi
-  fail "$(basename "$dir") failed to start. If a container above holds $port and is not part of this deployment, stop it (docker stop <name>) and re-run."
+
+  # Not a port problem — surface what docker actually said.
+  echo "--- last lines of the failed start ---" >&2
+  tail -15 "$log" | sed 's/^/  /' >&2
+  rm -f "$log"
+  fail "$(basename "$dir") failed to start. Full logs: (cd $dir && docker compose logs --tail=80)"
 }
 
 deploy_cvpap() {
