@@ -75,9 +75,36 @@ export const CARD_KINDS: Record<CardKind, KindDefinition> = {
         description: "Personal cards for your team — data comes from Companies & People.",
         emoji: "💼",
         source: "person",
+        // Grouped so the form reads as sections rather than one long column, and
+        // so the four service slots cluster together instead of interleaving with
+        // contact details.
         fields: Object.entries(BUILT_IN_FIELD_LABELS)
             .filter(([k]) => k !== "custom")
-            .map(([key, label]) => ({ key, label })),
+            .map(([key, label]) => {
+                const service = key.match(/^service_(\d)_(name|phone)$/);
+                if (service) {
+                    return {
+                        key,
+                        // "Service 1 — name" is the storage label; in the form the
+                        // group heading already says Services, so the slot reads better
+                        // as "1 — what you offer".
+                        label: service[2] === "name" ? `${service[1]} — what you offer` : `${service[1]} — phone`,
+                        type: service[2] === "phone" ? ("phone" as const) : ("text" as const),
+                        placeholder: service[2] === "name" ? "e.g. Water delivery" : "07XX XXX XXX",
+                        group: "Services (optional)",
+                    };
+                }
+                const type =
+                    key === "email" ? ("email" as const)
+                    : key === "website" ? ("url" as const)
+                    : key === "phone" ? ("phone" as const)
+                    : ("text" as const);
+                const group =
+                    ["email", "phone", "address", "website"].includes(key) ? "Contact"
+                    : ["company", "title"].includes(key) ? "Business"
+                    : "Name";
+                return { key, label, type, group };
+            }),
         images: [{ key: "logo", label: "Company logo" }, { key: "photo", label: "Photo" }],
         sizes: BUSINESS_CARD_SIZES,
         sample: SAMPLE_CARD_DATA,

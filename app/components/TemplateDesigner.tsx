@@ -12,6 +12,7 @@ import { useTranslation } from "./I18nProvider";
 import ConfirmModal from "./ConfirmModal";
 import { useToast } from "./ToastProvider";
 import ThemeMatcher from "./ThemeMatcher";
+import BackgroundPicker from "./BackgroundPicker";
 import LayersPanel from "./designer/LayersPanel";
 import DesignerCanvas from "./designer/DesignerCanvas";
 import PropertiesPanel from "./designer/PropertiesPanel";
@@ -591,6 +592,26 @@ export default function TemplateDesigner({
                         <div className="ml-auto">
                             <ThemeMatcher config={activeConfig} onApply={(next) => setActive(() => next)} />
                         </div>
+                    </div>
+
+                    {/* Shown open, already narrowed to the trade read from the
+                        template name and sample content, so it does not have to be
+                        discovered to be used. */}
+                    <div className="max-w-2xl">
+                        <BackgroundPicker
+                            hints={[name, previewData.company, previewData.business_name, previewData.title].map((v) =>
+                                typeof v === "string" ? v : undefined,
+                            )}
+                            value={activeConfig.backgroundPreset ?? null}
+                            onPick={(preset) =>
+                                setActive((prev) => ({
+                                    ...prev,
+                                    backgroundGradient: preset.kind === "solid" ? undefined : preset.css,
+                                    backgroundColor: preset.kind === "solid" ? preset.css : prev.backgroundColor,
+                                    backgroundPreset: preset.key,
+                                }))
+                            }
+                        />
                     </div>
                     <div className="rounded-xl p-8" style={{ backgroundColor: activeConfig.pageBackgroundColor ?? "#f4f4f5" }}>
                         <DesignerCanvas

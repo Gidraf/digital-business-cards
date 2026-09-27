@@ -52,7 +52,7 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 		css: "linear-gradient(135deg, #ffffff 0%, #eff6ff 55%, #bfdbfe 100%)",
 		ink: 0.12,
 		suggestedText: "#0c4a6e",
-		trades: ["water", "delivery", "cleaning"],
+		trades: ["water", "cleaning"],
 	},
 	{
 		key: "water_deep",
@@ -61,7 +61,7 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 		css: "linear-gradient(180deg, #ffffff 0%, #ffffff 62%, #1e6091 62%, #14496e 100%)",
 		ink: 0.3,
 		suggestedText: "#0c4a6e",
-		trades: ["water", "delivery"],
+		trades: ["water"],
 	},
 	{
 		key: "gas_warm",
@@ -133,7 +133,7 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 		css: "linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #e2e8f0 100%)",
 		ink: 0.1,
 		suggestedText: "#0f172a",
-		trades: ["any", "office", "consulting", "cyber"],
+		trades: ["office", "consulting", "cyber", "delivery", "any"],
 	},
 	{
 		key: "corner_accent",
@@ -142,7 +142,7 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 		css: "radial-gradient(circle at 0% 100%, #1e293b 0%, #334155 14%, #ffffff 34%)",
 		ink: 0.16,
 		suggestedText: "#0f172a",
-		trades: ["any", "office"],
+		trades: ["delivery", "office", "any"],
 	},
 ];
 
@@ -150,7 +150,16 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 export function backgroundsForTrade(trade?: string | null): BackgroundPreset[] {
 	const wanted = (trade ?? "").trim().toLowerCase();
 	if (!wanted) return BACKGROUND_PRESETS;
-	const matches = BACKGROUND_PRESETS.filter((p) => p.trades.some((t) => t !== "any" && wanted.includes(t)));
+	// A preset lists its trades most-central first, so a grocery gets "fresh
+	// green" (its primary) ahead of "butchery red" (which merely also serves
+	// groceries).
+	const rank = (p: BackgroundPreset) => {
+		const i = p.trades.findIndex((t) => t !== "any" && wanted.includes(t));
+		return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+	};
+	const matches = BACKGROUND_PRESETS.filter((p) => rank(p) !== Number.MAX_SAFE_INTEGER).sort(
+		(a, b) => rank(a) - rank(b),
+	);
 	const rest = BACKGROUND_PRESETS.filter((p) => !matches.includes(p));
 	return [...matches, ...rest];
 }
@@ -175,6 +184,7 @@ const TRADE_HINTS: Record<string, string[]> = {
 	cyber: ["cyber", "print", "computer", "internet"],
 	construction: ["construction", "build", "contractor"],
 	mechanic: ["mechanic", "garage", "auto", "motor"],
+	office: ["consult", "advocate", "account", "agency", "insurance", "sacco", "ltd", "limited", "services"],
 };
 
 export function guessTrade(...text: (string | undefined | null)[]): string | null {
