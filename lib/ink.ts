@@ -119,6 +119,35 @@ export function inkSaveConfig(cfg: TemplateConfig, mode: InkMode): TemplateConfi
     const bgWasDark = !!bg && luminance(bg) < LIGHT_ENOUGH;
     const newBackground = bgWasDark ? "#ffffff" : cfg.backgroundColor;
 
+    // A gradient covers the whole face, so it is the single most expensive
+    // thing on the card. Saver keeps the palest stop as a flat tint — the card
+    // still reads as themed — and max drops back to the colour underneath.
+    let newGradient = cfg.backgroundGradient;
+    if (newGradient) {
+        const stops = [...newGradient.matchAll(/#[0-9a-fA-F]{3,6}|rgba?\([^)]*\)/g)]
+            .map((m) => ({ css: m[0], rgb: parseColor(m[0]) }))
+            .filter((x) => x.rgb);
+        // Mean luminance across the stops approximates what the whole face costs,
+        // since a gradient covers all of it.
+        const meanLum = stops.length ? stops.reduce((sum, s) => sum + luminance(s.rgb!), 0) / stops.length : 1;
+
+        if (mode === "max") {
+            // Max drops every gradient: even a pale one is ink across the full face.
+            newGradient = undefined;
+        } else if (meanLum >= LIGHT_ENOUGH) {
+            // Already cheap — flattening it would lose the theming and save nothing.
+            newGradient = cfg.backgroundGradient;
+        } else {
+            // Expensive: keep the palest stop as a flat tint so the card still
+            // reads as themed, or fall back to the colour underneath.
+            const lightest = [...stops].sort((a, b) => luminance(b.rgb!) - luminance(a.rgb!))[0];
+            newGradient =
+                lightest && luminance(lightest.rgb!) >= LIGHT_ENOUGH
+                    ? `linear-gradient(${lightest.css}, ${lightest.css})`
+                    : undefined;
+        }
+    }
+
     // 2. fills, images, shadows
     const elements: CardElement[] = [];
     for (const el of cfg.elements) {
@@ -180,7 +209,7 @@ export function inkSaveConfig(cfg: TemplateConfig, mode: InkMode): TemplateConfi
         return { ...el, color: isNeutral ? "#1f2937" : toHex(darken(colour)) };
     });
 
-    return { ...cfg, backgroundColor: newBackground, elements: fixed };
+    return { ...cfg, backgroundColor: newBackground, backgroundGradient: newGradient, elements: fixed };
 }
 
 /**

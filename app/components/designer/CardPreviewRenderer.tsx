@@ -47,7 +47,8 @@ export default function CardPreviewRenderer({ config, data, assetUrls = {}, scal
                 position: "relative",
                 overflow: "hidden",
                 borderRadius: 12 * scale,
-                backgroundColor: config.backgroundColor,
+                // `background`, not `backgroundColor`: the latter ignores gradients.
+                background: config.backgroundGradient || config.backgroundColor,
                 boxShadow: "0 4px 24px rgba(0,0,0,0.1)",
             }}
         >

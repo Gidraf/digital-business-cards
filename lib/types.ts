@@ -64,6 +64,15 @@ export interface TemplateConfig {
     width: number;
     height: number;
     backgroundColor: string;
+    /**
+     * A CSS gradient for the card face, taking precedence over
+     * `backgroundColor`. Kept separate rather than overloading the colour so
+     * the ink saver can drop back to the flat colour underneath it, and so a
+     * template without one behaves exactly as before.
+     */
+    backgroundGradient?: string;
+    /** Which preset produced the gradient, so the picker can show it selected. */
+    backgroundPreset?: string;
     pageBackgroundColor?: string;
     elements: CardElement[];
 }
@@ -150,7 +159,43 @@ export const BUILT_IN_FIELD_LABELS: Record<string, string> = {
     company: "Company",
     website: "Website",
     custom: "Custom Text",
+    // One card, several lines of business — a duka that also does water
+    // delivery and hardware wants a different number against each. Four is the
+    // most that fits legibly on a 89×51 mm card.
+    service_1_name: "Service 1 — name",
+    service_1_phone: "Service 1 — phone",
+    service_2_name: "Service 2 — name",
+    service_2_phone: "Service 2 — phone",
+    service_3_name: "Service 3 — name",
+    service_3_phone: "Service 3 — phone",
+    service_4_name: "Service 4 — name",
+    service_4_phone: "Service 4 — phone",
 };
+
+/** The service slots, in order. */
+export const SERVICE_SLOTS = [1, 2, 3, 4] as const;
+export type ServiceSlot = (typeof SERVICE_SLOTS)[number];
+
+export type CardService = { name: string; phone: string };
+
+/**
+ * Pull the filled-in services out of flat card data.
+ *
+ * Fields are stored flat (`service_2_phone`) because that is what the template
+ * binding, bulk import and CVPAP storage all expect; this is the one place that
+ * reads them back as a list. A slot needs a name to count — a bare number with
+ * no label tells the reader nothing.
+ */
+export function cardServices(data: Record<string, string | undefined> | null | undefined): CardService[] {
+    if (!data) return [];
+    const out: CardService[] = [];
+    for (const slot of SERVICE_SLOTS) {
+        const name = (data[`service_${slot}_name`] ?? "").trim();
+        const phone = (data[`service_${slot}_phone`] ?? "").trim();
+        if (name) out.push({ name, phone });
+    }
+    return out;
+}
 
 // --- API records (mirror app/model/cards.py in CVPAP) ---
 

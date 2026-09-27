@@ -153,7 +153,7 @@ export function renderElementHtml(el: CardElement, data: CardData, images: Rende
 export function renderFaceHtml(config: TemplateConfig, data: CardData, images: RenderImages, opts: RenderOptions = {}, extraStyle = ""): string {
     const sorted = [...config.elements].sort((a, b) => a.zIndex - b.zIndex);
     const elements = sorted.map((el) => renderElementHtml(el, data, images, opts)).join("\n");
-    return `<div class="card-face" style="position:relative;width:${config.width}px;height:${config.height}px;background:${config.backgroundColor};overflow:hidden;${extraStyle}">${elements}</div>`;
+    return `<div class="card-face" style="position:relative;width:${config.width}px;height:${config.height}px;background:${config.backgroundGradient || config.backgroundColor};overflow:hidden;${extraStyle}">${elements}</div>`;
 }
 
 /** A standalone, responsive web page for one card (digital export). */
